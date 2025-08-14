@@ -725,7 +725,8 @@ async def bacnet_scan_read_object_list_names(
         "device_address": device_address,
         "device_object_identifier": device_object_identifier,
         "page": page,
-        "page_size": page_size
+        "page_size": page_size,
+        "force_fresh_read": False
     }
     try:
         response = await ToolProxyFactory.request(

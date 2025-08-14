@@ -1953,6 +1953,9 @@ class BacnetScanState(rx.State):
         """Background task to scan for points from an object list."""
         logger.debug(f"Starting background point scan for device {device.scanned_ip_target}")
         
+        # Set points per page to 100
+        points_per_page = 100
+        
         # Create status object and add it to the list
         status_id = len(self.all_device_scan_point_status)
         device_name = device.object_name
@@ -1960,7 +1963,6 @@ class BacnetScanState(rx.State):
         # Get device index
         device_object_index: list[str] = device.deviceIdentifier.split(",")
         device_identifier: str = device_object_index[1]
-
         status = BACnetDevicePointScanStatus(
             message=f"Scanning {total_points_amount} points on device: {device_name}...",
             device_name=device_name,
@@ -1973,9 +1975,9 @@ class BacnetScanState(rx.State):
         yield BacnetScanState.update_ui()
         
         try:
-            # Calculate total pages needed
-            total_pages = (total_points_amount + self._point_per_page_limit - 1) // self._point_per_page_limit
-            logger.debug(f"Scanning {total_points_amount} points across {total_pages} pages")
+            # Calculate total pages needed with 100 points per page
+            total_pages = (total_points_amount + points_per_page - 1) // points_per_page
+            logger.debug(f"Scanning {total_points_amount} points across {total_pages} pages (100 points per page)")
             
             # Clear existing points if needed
             device.points = []
@@ -1990,46 +1992,50 @@ class BacnetScanState(rx.State):
             for current_page in range(1, total_pages + 1):
                 logger.debug(f"Requesting page {current_page} of {total_pages}")
                 
-                # Update status - indicate how many points we've processed and how many more to go
-                points_so_far = min(points_processed, total_points_amount)
+                # Calculate the range of points for this page
+                start_point = points_processed + 1
+                end_point = min(start_point + points_per_page - 1, total_points_amount)
                 
+                # Update status - indicate how many points we've processed and how many more to go
                 async with self:
-                    self.all_device_scan_point_status[status_id].message = f"Reading points {points_so_far+1}-{min(points_so_far+self._point_per_page_limit, total_points_amount)} of {total_points_amount}..."
-                    self.all_device_scan_point_status[status_id].percent_finished = int(points_so_far / total_points_amount * 100)
+                    self.all_device_scan_point_status[status_id].message = f"Reading points {start_point}-{end_point} of {total_points_amount}..."
+                    self.all_device_scan_point_status[status_id].percent_finished = int(points_processed / total_points_amount * 100)
                 yield BacnetScanState.update_ui()
                 
+                # Use original self.page variable for pagination, but request 100 points
                 res: ObjectListNamesResponse = await read_bacnet_object_list_names(
                     BACnetReadObjectListRequest(
                         device_address=device.scanned_ip_target,
                         device_object_identifier=device.deviceIdentifier,
-                        page_size=self._point_per_page_limit,
+                        page_size=points_per_page,
                         page=current_page
                     )
                 )
                 
                 if res.status != "done":
-                    logger.error(f"Error getting points {points_so_far+1}-{min(points_so_far+self._point_per_page_limit, total_points_amount)}: {res.error}")
+                    logger.error(f"Error getting points {start_point}-{end_point}: {res.error}")
                     async with self:
-                        self.all_device_scan_point_status[status_id].message = f"Error retrieving points {points_so_far+1}-{min(points_so_far+self._point_per_page_limit, total_points_amount)}: {res.error}"
+                        self.all_device_scan_point_status[status_id].message = f"Error retrieving points {start_point}-{end_point}: {res.error}"
                     yield BacnetScanState.update_ui()
-                    points_processed += self._point_per_page_limit  # Move to next page even if there was an error
+                    points_processed += points_per_page  # Move to next page even if there was an error
                     continue
                     
                 # Update status - processing points
                 points_in_page = len(res.results)
                 async with self:
-                    self.all_device_scan_point_status[status_id].message = f"Processing {points_in_page} points ({points_so_far+1}-{points_so_far+points_in_page} of {total_points_amount})..."
+                    self.all_device_scan_point_status[status_id].message = f"Processing {points_in_page} points ({start_point}-{start_point+points_in_page-1} of {total_points_amount})..."
                 yield BacnetScanState.update_ui()
                     
                 # Process the results for this page
                 for i, (object_identifier, properties) in enumerate(res.results.items()):
                     try:
                         # Occasionally update processing status
-                        if i % 5 == 0:  # Update every 5 points
+                        if i % 10 == 0:  # Update every 10 points for better performance
+                            current_point = points_processed + i + 1
                             async with self:
-                                self.all_device_scan_point_status[status_id].message = f"Processing point {points_so_far+i+1} of {total_points_amount}..."
+                                self.all_device_scan_point_status[status_id].message = f"Processing point {current_point} of {total_points_amount}..."
                                 self.all_device_scan_point_status[status_id].percent_finished = int(
-                                    (points_so_far + i) / total_points_amount * 100
+                                    (points_processed + i) / total_points_amount * 100
                                 )
                             yield BacnetScanState.update_ui()
                         
@@ -2046,7 +2052,6 @@ class BacnetScanState(rx.State):
                         if f"{index_value}" == f"{device_identifier}":
                             logger.info("Skipping `host` device of the points within the object-list")
                             continue
-
                         # Extract properties
                         point_name = properties.object_name or f"Unknown-{object_identifier}"
                         units = properties.units
@@ -2597,7 +2602,7 @@ class BacnetScanState(rx.State):
                                 device_address=device.scanned_ip_target,
                                 device_object_identifier=device.deviceIdentifier
                             ),
-                            timeout=30.0
+                            timeout=5.0
                         )
                     if res.get("status") == "error":
                         logger.debug(f"this is our res: {res}")
