@@ -30,7 +30,7 @@ class AppState(rx.State):
     @rx.var
     def sidebar_selected_page(self) -> str:
         self._sidebar_page_selected = self.router.page.raw_path if self.router.page.raw_path != "/" else "overview"
-        logger.debug(self._sidebar_page_selected)
+        # logger.debug(self._sidebar_page_selected)
         return self._sidebar_page_selected
 
     @rx.event
@@ -56,7 +56,8 @@ class ToolState(rx.State):
     _running_tools: dict[str, bool] = {}
     loading_tools: dict[str, bool] = {}
     error_message: Optional[str] = None
-    
+    _monitoring_tools: bool = False
+
     # Tool configuration
     tool_configs: dict[str, ToolRequest] = {
         "bacnet_scan_tool": ToolRequest(
@@ -68,13 +69,20 @@ class ToolState(rx.State):
 
     # Computed var to make sure we are accessing running tool
     @rx.var
-    def running_tools(self) -> dict[str, bool]:
-        return self._running_tools
+    def running_tools(self) -> list[str]:
+        tool_names: list[str] = list(self._running_tools.keys())
+        return [
+            tool_name for tool_name in tool_names if self._running_tools.get(tool_name, False)
+        ]
 
     @rx.event(background=True)
     async def monitor_all_tools(self):
+        async with self:
+            if self._monitoring_tools:
+                return
+            self._monitoring_tools = True
         while True:
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
             async with self:
                 for tool_id in self.tool_configs:
                     try:
@@ -83,8 +91,25 @@ class ToolState(rx.State):
                     except Exception as e:
                         self._running_tools[tool_id] = False
 
+    @rx.event(background=True)
+    async def initialize_tool(self, tool_id: str):
+        async with self:
+            try:
+                # Get tool config
+                config = self.tool_configs[tool_id]
+                logger.debug("calling api...")
+                # Call API to start the tool
+                await start_tool(config)
+                logger.debug("tool started")
+                
+            except Exception as e:
+                logger.debug(f"Error starting tool: {str(e)}")
+            finally:
+                # Clear loading state
+                self.loading_tools[tool_id] = False
+
     @rx.event
-    async def start_tool(self, tool_id: str):
+    def start_tool(self, tool_id: str):
         """Start a specific tool service."""
         logger.debug(f"starting tool : {tool_id}")
         if tool_id not in self.tool_configs:
@@ -100,21 +125,8 @@ class ToolState(rx.State):
         logger.debug(f"setting tool to loading: {tool_id}")
         self.loading_tools[tool_id] = True
         
-        try:
-            # Get tool config
-            config = self.tool_configs[tool_id]
-            logger.debug("calling api...")
-            # Call API to start the tool
-            await start_tool(config)
-            self.running_tools[tool_id] = True
-            logger.debug("tool started")
-            
-            yield ToolState.monitor_all_tools()
-        except Exception as e:
-            logger.debug(f"Error starting tool: {str(e)}")
-        finally:
-            # Clear loading state
-            self.loading_tools[tool_id] = False
+        # Trigger the background initialization
+        yield ToolState.initialize_tool(tool_id)
     
     @rx.event
     async def stop_tool(self, tool_id: str) -> None:
@@ -963,8 +975,14 @@ class AgentConfigState(rx.State):
     working_agent: AgentModelView = AgentModelView()
     selected_component_id: str = ""
     draft_visible: bool = False
+
+    _loading_page: bool = False
     
     # Vars
+    @rx.var
+    def loading_page(self) -> bool:
+        return self._loading_page
+
     # this being named agent details doesn't make sense to be honest
     @rx.var
     def agent_details(self) -> dict:
@@ -1105,17 +1123,21 @@ class AgentConfigState(rx.State):
     # ======== End of agent validation vars========
 
     # Events
-    @rx.event
+    @rx.event(background=True)
     async def hydrate_working_agent(self):
         """Initialize working agent from platform state"""
-        platform_state: PlatformPageState = await self.get_state(PlatformPageState)
-        working_platform: Instance = platform_state.platforms[self.agent_details["uid"]]
-        
-        # Find agent by routing_id
-        for agent in working_platform.platform.agents.values():
-            if agent.routing_id == self.agent_details["agent_uid"]:
-                self.working_agent = agent
-                break
+        async with self:
+            self._loading_page = True
+            
+            platform_state: PlatformPageState = await self.get_state(PlatformPageState)
+            working_platform: Instance = platform_state.platforms[self.agent_details["uid"]]
+            
+            # Find agent by routing_id
+            for agent in working_platform.platform.agents.values():
+                if agent.routing_id == self.agent_details["agent_uid"]:
+                    self.working_agent = agent
+                    break
+            self._loading_page = False
 
     @rx.event
     def change_agent_config_tab(self, value):

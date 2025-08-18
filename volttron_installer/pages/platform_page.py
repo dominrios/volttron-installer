@@ -441,7 +441,6 @@ def configuration_tab_content() -> rx.Component:
                                                                 on_click=lambda: NavigationState.route_to_agent_config(
                                                                     State.current_uid,
                                                                     identity_agent_pair[1].routing_id,
-                                                                    identity_agent_pair[1]
                                                                 )
                                                             ),
                                                             # This works but i dont want to implement it just yet, i want more info on how

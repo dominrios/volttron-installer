@@ -575,7 +575,7 @@ from loguru import logger
 @rx.page(route="/platform/[uid]/agent/[agent_uid]", on_load=AgentConfigState.hydrate_working_agent)
 def agent_config_page() -> rx.Component:
     return rx.cond(
-        AgentConfigState.is_hydrated, 
+        AgentConfigState.loading_page == False, 
         app_layout(
             header(
                 icon_button_wrapper.icon_button_wrapper(

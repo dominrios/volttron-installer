@@ -12,10 +12,10 @@ from ..components.buttons import tile_icon
 from .platform_page import State as PlatformState 
 from ..layouts.app_layout_sidebar import app_layout_sidebar
 
-from ..state import IndexPageState, PlatformPageState
+from ..state import IndexPageState, PlatformPageState, ToolState
 
 
-@rx.page(route="/", on_load=PlatformState.hydrate_state)
+@rx.page(route="/", on_load=[PlatformState.hydrate_state, ToolState.monitor_all_tools])
 def index() -> rx.Component:
     return app_layout_sidebar(
             platform_overview_tab()
