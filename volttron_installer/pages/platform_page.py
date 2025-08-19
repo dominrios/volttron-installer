@@ -15,6 +15,88 @@ parts = Literal["connection", "instance_configuration"]
 
 @rx.page(route="/platform/[uid]", on_load=[State.hydrate_state, State.initialize_form_from_model])
 def platform_page() -> rx.Component:
+    return rx.box(
+        rx.vstack(
+            header(
+                rx.hstack(
+                    icon_button_wrapper.icon_button_wrapper(
+                        tool_tip_content="Go back to overview",
+                        icon_key="arrow-left",
+                        on_click=lambda: NavigationState.route_to_index()
+                    ),
+                    rx.text(f"""{
+                            rx.cond(
+                                State.working_platform.new_instance,
+                                'New Platform',
+                                f'Platform: {State.platform_title}'
+                            )
+                        }""",
+                        trim="both",
+                        size="6"
+                    ),
+                    spacing="6",
+                    align="center",
+                ),
+                rx.hstack(
+                    rx.cond(
+                        State.working_platform.new_instance==False,
+                        icon_button_wrapper.icon_button_wrapper(
+                            tool_tip_content="Copy Platform",
+                            icon_key="copy",
+                            on_click=lambda: State.copy_platform(State.current_uid)
+                        )
+                    ),
+                    icon_button_wrapper.icon_button_wrapper(
+                        tool_tip_content="Delete platform",
+                        icon_key="trash-2",
+                    ),
+                ),
+                justify="between",
+                width="100%",
+            ),
+            rx.tabs.root(
+                rx.tabs.list(
+                    rx.tabs.trigger(
+                        "Status", value="status", disabled=rx.cond(
+                            State.working_platform.platform.in_file,
+                            False,
+                            True
+                        )
+                    ),
+                    rx.tabs.trigger("Connection", value="connection"),
+                    rx.tabs.trigger("Instance Configuration", value="instance_configuration"),
+                    rx.tabs.trigger("Agent Configuration", value="agent_configuration"),
+                ),
+                rx.tabs.content(
+                    connection_tab(),
+                    padding_y="1.5rem",
+                    value="connection"
+                ),
+                rx.tabs.content(
+                    instance_configuration_tab(),
+                    padding_y="1.5rem",
+                    value="instance_configuration"
+                ),
+                rx.tabs.content(
+                    agent_configuration_tab(),
+                    value="agent_configuration"
+                ),
+                width="100%",
+            ),
+            width="100%",
+            max_width="1200px",
+            margin_left="auto",
+            margin_right="auto",
+            padding_y="1.5rem",
+        ),
+        height="100vh",
+        width="100%",
+        overflow_y="auto",
+        padding_x="16px",
+    )
+
+
+def platform_pagea() -> rx.Component:
 
     # State.working_platform: Instance = State.platforms[State.current_uid]
 
