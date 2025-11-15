@@ -290,6 +290,7 @@ async def __instances_from_api__() -> dict[str, Instance]:
                 ),
                 new_instance = False,
                 safe_host_entry=host.to_dict(),
+                selected_tab = "status"
             )
         }
         
@@ -800,6 +801,12 @@ class PlatformPageState(rx.State):
         logger.debug(f"this is the uid about to deletee: {uid_copy}")
         yield PlatformPageState.delete_temp_uid(uid_copy)
         yield PlatformPageState.hydrate_state(True)
+        working_platform.platform.config.instance_name
+
+    @rx.event
+    async def handle_save_deploy(self):
+        yield PlatformPageState.handle_save()
+        yield PlatformPageState.handle_deploy()
 
     @rx.event
     async def determine_host_reachability(self, working_platform: Instance):

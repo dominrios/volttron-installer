@@ -96,6 +96,7 @@ class AgentModelView(rx.Base):
     source: str = ""
     config: str = ""
     config_store: list[ConfigStoreEntryModelView] = []
+    config_sate: Literal["draft", "pending", "deployed"] = "pending"
 
     contains_errors: bool = False
     is_new: bool = False

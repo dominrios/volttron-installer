@@ -192,7 +192,6 @@ def connection_tab() -> rx.Component:
             ),
             rx.divider(),
             # Advanced Settings...
-            # TODO wrap the grids and trailing divider to a rx.cond if advanced is toggled
             rx.cond(
                 State.working_platform.advanced_expanded,
                 rx.fragment(
@@ -239,6 +238,7 @@ def connection_tab() -> rx.Component:
                         columns="1",
                         width="100%"
                     ),
+                    # TODO: Pull in the checks for volttron home and host configs dir
                     rx.grid(
                         rx.vstack(
                             rx.text("VOLTTRON Home", as_="label", html_for="volttron-home"),
@@ -324,8 +324,9 @@ def instance_configuration_tab() -> rx.Component:
                     ),
                     # TODO add conditional to turn text red if error
                     rx.text(
-                        "Instance Name must contain only letters, numbers, hyphens, and underscores", 
-                        color_scheme=rx.cond(
+                        "Instance Name must contain only letters, numbers, hyphens, and underscores",
+                        size = "1",
+                        color_scheme = rx.cond(
                             State.platform_instance_name_validity == False,
                             "red",
                             "gray"
@@ -335,7 +336,8 @@ def instance_configuration_tab() -> rx.Component:
                         State.platform_instance_name_not_in_use == False,
                         rx.text(
                             "Instance Name already in use", 
-                            color_scheme="red"
+                            color_scheme = "red",
+                            size = "1"
                         )
                     ),
                     width="100%",
@@ -533,15 +535,74 @@ def agent_configuration_tab() -> rx.Component:
                 on_click=lambda: State.set_platform_tab("instance_configuration"),
                 variant="outline"
             ),
-            rx.button(
-                "Complete Setup", # deploy, save, whatever we want
-                color_scheme="green",
+            rx.dialog.root(
+                rx.dialog.trigger(
+                    rx.button(
+                        rx.cond(
+                            State.platform_deployed,
+                            "Save and Re-Deploy",
+                            "Save and Deploy"
+                        ),
+                        color_scheme = "green",
+                        disabled = rx.cond(
+                            State.instance_savable,
+                            # (State.instance_savable)
+                            # & (State.instance_uncaught),
+                            False,
+                            True
+                        )
+                    ),
+                ),
+                rx.dialog.content(
+                    rx.dialog.title("Password Required"),
+                    rx.dialog.description("To deploy, please provide your ssh password"),
+                    rx.vstack(
+                        rx.vstack(
+                            form_entry.form_entry(
+                                "Password",
+                                rx.input(
+                                    type="password",
+                                    on_change=State.update_password_field,
+                                    value=State.password_field
+                                ),
+                                required_entry=True
+                            ),
+                            align="center",
+                            justify="center"
+                        ),
+                        rx.hstack(
+                            rx.dialog.close(
+                                rx.button(
+                                    "Cancel",
+                                    variant="soft",
+                                    color_scheme="gray",
+                                )
+                            ),
+                            rx.dialog.close(
+                                rx.button(
+                                    "Submit",
+                                    on_click=lambda: State.handle_save_deploy(),
+                                    disabled=rx.cond(
+                                        State.password_field=="",
+                                        True,
+                                        False
+                                    )
+                                )
+                            ),
+                            spacing="3",
+                            justify="end",
+                        ),
+                        width="100%",
+                        padding_top="1rem",
+                        spacing="6"
+                    )
+                )
             ),
             justify="between",
             width="100%",
         ),
         spacing="4",
-        width="100%", # Ensure full width
+        width="100%",
     )
 
 @rx.memo
@@ -569,10 +630,11 @@ def added_agent_tile(agent: AgentModelView) -> rx.Component:
             rx.box(
                 rx.hstack(
                     rx.text(agent.identity, size="5", weight="bold"),
+                    added_agent_status("deployed"),
                     spacing="2",
-                    align="center"
+                    align="center",
+                    justify="center"
                 ),
-                # rx.text(description, size="2", color="gray"),
             ),
             rx.hstack(
                 rx.button(
@@ -605,6 +667,30 @@ def added_agent_tile(agent: AgentModelView) -> rx.Component:
         border_radius=".5rem",
         box_shadow="0 4px 12px rgba(0,0,0,0.08)",
         padding=".75rem",
+    )
+
+
+def added_agent_status(config_state: str) -> rx.Component:
+    """
+        A small status indicator for added agents on the added agents tile.
+        Parameters:
+            config_state (str): The state of the agent configuration. Can be "draft"
+              "pending", or "deployed".
+    """
+    return rx.badge(
+        config_state,
+        color_scheme=rx.cond(
+            config_state == "draft",
+            "orange",
+            rx.cond(
+                config_state == "pending",
+                "blue",
+                "gray"
+            )
+        ),
+        variant="surface",
+        radius="medium",
+        size="2"
     )
 
 def add_agent_tile(agent: AgentModelView) -> rx.Component:
@@ -776,10 +862,34 @@ def platform_page() -> rx.Component:
                 rx.hstack(
                     rx.cond(
                         State.working_platform.new_instance==False,
-                        icon_button_wrapper.icon_button_wrapper(
-                            tool_tip_content="Copy Platform",
-                            icon_key="copy",
-                            on_click=lambda: State.copy_platform(State.current_uid)
+                        rx.fragment(
+                            rx.button(
+                                # rx.icon(""),
+                                rx.text(
+                                    rx.cond(
+                                        State.platform_deployed,
+                                        "Re-Deploy",
+                                        "Deploy"
+                                    )
+                                ),
+                            ),
+                            rx.button(
+                                # rx.icon(""),
+                                rx.text(
+                                    "Pause"
+                                ),
+                                disabled=rx.cond(
+                                    State.platform_deployed,
+                                    False,
+                                    True
+                                )
+                            ),
+                            rx.divider(orientation="vertical", size="2"),
+                            icon_button_wrapper.icon_button_wrapper(
+                                tool_tip_content="Copy Platform",
+                                icon_key="copy",
+                                on_click=lambda: State.copy_platform(State.current_uid)
+                            )
                         )
                     ),
                     icon_button_wrapper.icon_button_wrapper(
