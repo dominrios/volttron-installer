@@ -15,6 +15,7 @@ from bacnet_scan_tool.models import ScanResponse, ObjectListNamesResponse
 
 from .models import (
     CreateOrUpdateHostEntryRequest,
+    PlatformDeploymentStatus,
     SuccessResponse,
     CreatePlatformRequest,
     PlatformDefinition,
@@ -183,11 +184,19 @@ async def get_platform_status(
         ansible_service: AnsibleService = Depends(get_ansible_service),
         platform_service: PlatformService = Depends(get_platform_service)):
     """Retrieves the status of a specific platform"""
-    status = await ansible_service.get_platform_status(platform_id)
+    deployment_status = await ansible_service.get_platform_status(platform_id)
 
-    if status is None:
+    if deployment_status is None:
+        # If we can not find the platform status, check if the platform exists
+        platform_service = await get_platform_service()
+        platform = await platform_service.get_platform(platform_id)
+        if platform is not None:
+            return PlatformDeploymentStatus(
+                platform_id=platform_id,
+                state="not_deployed"
+            )
         raise HTTPException(status_code=404, detail="Platform not found")
-    return status
+    return deployment_status
 
 # @ansible_router.get("/update-all-status")
 # async def update_all_status():
