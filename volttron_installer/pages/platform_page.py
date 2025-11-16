@@ -1,5 +1,4 @@
 import reflex as rx
-
 from volttron_installer.model_views import AgentModelView
 from ..layouts.app_layout import app_layout
 from ..components.tiles import config_tile
@@ -535,7 +534,8 @@ def agent_configuration_tab() -> rx.Component:
                 on_click=lambda: State.set_platform_tab("instance_configuration"),
                 variant="outline"
             ),
-            rx.dialog.root(
+            rx.vstack(
+                rx.dialog.root(
                 rx.dialog.trigger(
                     rx.button(
                         rx.cond(
@@ -596,6 +596,11 @@ def agent_configuration_tab() -> rx.Component:
                         padding_top="1rem",
                         spacing="6"
                     )
+                )
+                ),
+                rx.cond(
+                    ~State.instance_savable,
+                    configuration_problem_tooltip()
                 )
             ),
             justify="between",
@@ -668,7 +673,6 @@ def added_agent_tile(agent: AgentModelView) -> rx.Component:
         box_shadow="0 4px 12px rgba(0,0,0,0.08)",
         padding=".75rem",
     )
-
 
 def added_agent_status(config_state: str) -> rx.Component:
     """
@@ -833,6 +837,43 @@ def agent_actions_dropdown(agent: AgentModelView) -> rx.Component:
                 color_scheme="red"
             )
         )
+    )
+
+def configuration_problem_tooltip() -> rx.Component:
+    return rx.hover_card.root(
+        rx.hover_card.trigger(
+            rx.text(
+                "One or more problems with the current configuration.",
+                text_decoration="underline", 
+                color_scheme="red",
+                cursor="pointer",
+                size="2"
+            )
+        ),
+        rx.hover_card.content(
+            rx.vstack(
+                rx.foreach(
+                    State.working_platform.configuration_problems,
+                    lambda problem: configuration_problem(problem_text=problem.message, tab=problem.tab)
+                ),
+                spacing="4",
+            )
+        )
+    )
+
+def configuration_problem(problem_text: str, tab: str) -> rx.Component:
+    return rx.hstack(
+        rx.icon("triangle-alert", size=20, color=rx.color("red", 10)),
+        rx.text(
+            problem_text,
+            color_scheme="red",
+            size="2",
+            text_decoration="underline"
+        ),
+        cursor="pointer",
+        spacing="2",
+        on_click=State.set_platform_tab(tab),
+        align="center"
     )
 
 @rx.page(route="/platform/[uid]", on_load=State.hydrate_state)

@@ -391,7 +391,8 @@ class PlatformPageState(rx.State):
 
     # ==== vars for connection validation ===
     @rx.var
-    def host_resolved(self) -> bool: return self._host_resolved
+    def host_resolved(self) -> bool:
+        return self._host_resolved
 
     @rx.var
     def connection_validity(self) -> bool:
@@ -408,8 +409,10 @@ class PlatformPageState(rx.State):
 
     @rx.var
     def is_host_resolvable(self) -> bool:
+        self.set_problematic_config_problems(self._working_platform,
+                                             self._host_resolvable,
+                                             ConfigProblemMessages.HOST_CANNOT_BE_RESOLVED)
         return self._host_resolvable
-
 
     @rx.var
     def connection_id_validity(self) -> bool:
@@ -482,7 +485,8 @@ class PlatformPageState(rx.State):
         working_platform: Instance | None = self.platforms.get(self.current_uid, None)
         if working_platform is None:
             return False
-        return self.platform_validity(working_platform)[1]["vip_address"]
+        validity: bool = self.platform_validity(working_platform)[1]["vip_address"]
+        return validity
     # === end of platform validation vars ===
 
     # === vars for instance validation ===
@@ -817,7 +821,11 @@ class PlatformPageState(rx.State):
         # var in real time 
         self._host_pinging = True
         yield
-        self._host_resolvable = await self.check_host_reachable(working_platform)
+        try:
+            host_resolvable: bool = await self.check_host_reachable(working_platform)
+        except:
+            host_resolvable = False
+        self._host_resolvable = host_resolvable
         self._host_pinging = False
         yield
         self._host_resolved = self._host_resolvable
@@ -846,12 +854,31 @@ class PlatformPageState(rx.State):
             if new_uid not in self.platforms:
                 return new_uid
     
-    # functions to check if things are savable, reachable, valid, uncaught.
-    async def check_host_reachable(self, working_platform: Instance) -> bool:
+    # functions to check if elements of a working_platform are savable, reachable, valid, 
+    # or uncaught.
+    async def check_host_reachable(self, working_platform: Instance):
+        """Checks if the host is reachable via ping.
+        
+        args:
+            working_platform (Instance): The platform instance containing the host information.
+        
+        exceptions:
+            Any errors during the ping operation with the provided platform's host_id
+        
+        return:
+            bool indicating if host is reachable
+        """
+        def show_unreachable_toast(host_id, e):
+            yield rx.toast.error(f"There was an error checking if host `{host_id}` is reachable: {e}")
+        
         host_id = working_platform.host.id
         if host_id =="":
             return False
-        response = await ping_resolvable_host(host_id)
+        try:
+            response = await ping_resolvable_host(host_id)
+        except Exception as e:
+            show_unreachable_toast(host_id, e)
+            return False
         return response.reachable
         
     def check_instance_uncaught(self, working_platform: Instance) -> bool:
@@ -910,6 +937,7 @@ class PlatformPageState(rx.State):
     def check_instance_deployable(self, working_platform: Instance) -> bool:
         return True if self.check_instance_uncaught(working_platform) == False and working_platform.new_instance == False else False
 
+    # TODO implement `set_problematic_config_problems` inside of these validity checks
     def connection_validity(self, working_platform: Instance) -> tuple[bool, dict[str, bool]]:
         valid = True
         validity_map: dict[str, bool] = {
@@ -957,23 +985,54 @@ class PlatformPageState(rx.State):
         if not valid_field_name_for_instance.fullmatch(working_platform.platform.config.instance_name):
             valid = False
             validity_map["instance_name"] = False
+        self.set_problematic_config_problems(working_platform, validity_map["instance_name"], ConfigProblemMessages.INSTANCE_NAME_INVALID)
         
-        new_name = working_platform.platform.config.instance_name
-        existing_names=[p.platform.safe_platform["config"]["instance_name"] for p in self.in_file_platforms if p.new_instance == False and self.current_uid != p.platform.safe_platform["config"]["instance_name"]]
-
         # Check to see if our instance is taken already:
         # Seeing if our instance name is inside a list of already registered instance names...
         if working_platform.platform.config.instance_name in [p.platform.safe_platform["config"]["instance_name"] for p in self.in_file_platforms if p.new_instance == False and self.current_uid != p.platform.safe_platform["config"]["instance_name"]]:
             valid = False
             validity_map["instance_name_not_used"] = False
+        self.set_problematic_config_problems(working_platform, validity_map["instance_name_not_used"], ConfigProblemMessages.INSTANCE_NAME_ALREADY_IN_USE)
             
-
-        # Validate the tcp address
+        # Validate the tcp address format
         if not re.match(r'^tcp://[\d.]+:\d+$', working_platform.platform.config.vip_address):
             valid = False
             validity_map["vip_address"] = False
+        self.set_problematic_config_problems(working_platform, validity_map["vip_address"], ConfigProblemMessages.VIP_ADDRESS_MUST_BE_VALID_FORMAT)
 
         return (valid, validity_map)
+
+    def add_configuration_problem(self, problem: ConfigProblemMessages):
+        """Add a configuration problem to the working platform."""
+        from .models import ConfigProblem  # Import here to avoid circular imports
+        
+        problem_obj = ConfigProblem.create(problem)
+        
+        # Check if already exists
+        if not any(p.matches_enum(problem) for p in self.working_platform.configuration_problems):
+            self._working_platform.configuration_problems.append(problem_obj)
+
+    def remove_configuration_problem(self, problem: ConfigProblemMessages):
+        """Remove a configuration problem from the working platform."""
+        self._working_platform.configuration_problems = [
+            p for p in self.working_platform.configuration_problems 
+            if not p.matches_enum(problem)
+        ]
+
+    def has_configuration_problem(self, problem: ConfigProblemMessages) -> bool:
+        """Check if the working platform has a specific configuration problem."""
+        return any(p.matches_enum(problem) for p in self._working_platform.configuration_problems)
+
+    def clear_configuration_problems(self):
+        """Clear all configuration problems from the working platform."""
+        self._working_platform.configuration_problems = []
+
+    def set_problematic_config_problems(self, working_platform: Instance, validity: bool, enum: ConfigProblemMessages):
+        """Sets the problematic config problems for the working platform based on its validity."""
+        if self.has_configuration_problem(enum) and validity:
+            self.remove_configuration_problem(enum)
+        elif not self.has_configuration_problem(enum) and not validity:
+            self.add_configuration_problem(enum)
 
 class AgentConfigState(rx.State):
     working_agent: AgentModelView = AgentModelView()
