@@ -24,35 +24,10 @@ class Instance(rx.Base):
     new_instance: bool = True
     deployed: bool = False
 
-    def has_uncaught_changes(self) -> bool:
-        return self.host.to_dict() != self.safe_host_entry
-
-    def does_host_have_errors(self) -> bool:
-        host_dict = self.host.to_dict()
-        if not all([host_dict.get("id"), host_dict.get("ansible_user"), host_dict.get("ansible_host")]):
-            logger.debug(f"Error: Missing host details {host_dict}")
-        # If all fields are filled out, return false because no errors
-        return (
-            host_dict["id"] and \
-            host_dict["ansible_user"] and \
-            host_dict["ansible_host"] != ""
-        )
-
-    def refresh_for_copy(self) -> None:
-        """
-        Refresh the instance for copying.
-        """
-        self.new_instance = True
-        self.platform.in_file = False
-        self.deployed = False
-        self.password = ""
-        for agent in self.platform.agents.values():
-            agent.in_file = False
-            agent.selected_config_component_id = ""
-            agent.selected_agent_config_tab="1"
-            for config in agent.config_store:
-                config.in_file = False
-                config.selected_cell = ""
+    # Business logic methods have been moved to InstanceService
+    # Use InstanceService.has_uncaught_changes(self) instead
+    # Use InstanceService.does_host_have_errors(self) instead
+    # Use InstanceService.refresh_for_copy(self) instead
 
 class Tool(rx.Base):
     name: str = ""

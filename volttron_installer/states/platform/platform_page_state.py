@@ -20,6 +20,7 @@ from copy import deepcopy
 from typing import Literal
 from bacnet_scan_tool.models import ObjectListNamesResponse
 from ...thin_endpoint_wrappers import get_agent_catalog, get_all_platforms, get_hosts
+from ...services.instance_service import InstanceService
 
 
 async def __agents_off_catalog__() -> list[AgentModelView]:
@@ -467,7 +468,7 @@ class PlatformPageState(rx.State):
         # Revert back to our previous host entry
         working_platform.host = HostEntryModelView(**working_platform.safe_host_entry)
         working_platform.uncaught = False
-        working_platform.valid = working_platform.does_host_have_errors()
+        working_platform.valid = not InstanceService.does_host_have_errors(working_platform)
 
         # Revert back to our previous platform
         working_platform.platform.config.instance_name = working_platform.platform.safe_platform["config"].get("instance_name", "volttron1")
@@ -505,7 +506,7 @@ class PlatformPageState(rx.State):
         uid = self.generate_unique_uid()
         copy_instance = deepcopy(self.platforms[instance_name])
         copy_instance.platform.config.instance_name = uid
-        copy_instance.refresh_for_copy()
+        InstanceService.refresh_for_copy(copy_instance)
         self.platforms[uid] = copy_instance
         yield NavigationState.route_to_platform(self.platforms[uid].platform.config.instance_name)
         yield rx.toast.info(f"Platform: {instance_name} has been copied")
@@ -548,7 +549,7 @@ class PlatformPageState(rx.State):
             self._host_resolved = False
             setattr(working_platform_instance.host, "ansible_host", value)
         setattr(working_platform_instance.host, field, value)
-        working_platform_instance.uncaught = working_platform_instance.has_uncaught_changes()
+        working_platform_instance.uncaught = InstanceService.has_uncaught_changes(working_platform_instance)
 
     @rx.event
     def update_platform_config_detail(self, field: str, value: str):
@@ -662,10 +663,10 @@ class PlatformPageState(rx.State):
     # state vars, for faster development, ive kept these here and i'll change it once it's time to refine the code.
     #   Secondary NOTE: not sure if i've already made changes.
     def handle_uncaught(self, working_platform: Instance):
-        working_platform.uncaught = working_platform.has_uncaught_changes()
+        working_platform.uncaught = InstanceService.has_uncaught_changes(working_platform)
 
     def handle_validity(self, working_platform: Instance):
-        working_platform.valid = not working_platform.does_host_have_errors()
+        working_platform.valid = not InstanceService.does_host_have_errors(working_platform)
 
     def generate_unique_uid(self, length=7) -> str:
         characters = string.ascii_letters + string.digits
