@@ -5,6 +5,7 @@ separated from data models to follow the Single Responsibility Principle.
 """
 
 from .instance_service import InstanceService
+from .validation_service import ValidationService
 
-__all__ = ["InstanceService"]
+__all__ = ["InstanceService", "ValidationService"]
 
