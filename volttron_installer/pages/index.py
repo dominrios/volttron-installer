@@ -3,12 +3,12 @@
 import reflex as rx
 
 from rxconfig import config
-from ..components.buttons import add_icon_button
+from ..components.ui.buttons import add_icon_button
 from ..components import header
 from ..components.form_components import form_entry
 from ..components.tabs import platform_overview
 from ..components.tiles.config_tile import config_tile
-from ..components.buttons import tile_icon
+from ..components.ui.buttons import tile_icon
 from .platform_page import State as PlatformState 
 from ..layouts.app_layout_sidebar import app_layout_sidebar
 

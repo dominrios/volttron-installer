@@ -2,7 +2,7 @@ import reflex as rx
 from ..state import BacnetScanState, ToolState, PlatformPageState
 from ..components.form_components import form_entry
 from ..components.tiles import platform_tile
-from ..components.buttons.tile_icon import tile_icon
+from ..components.ui.buttons.tile_icon import tile_icon
 from ..layouts import app_layout_sidebar
 from ..model_views import BACnetDeviceModelView, BACnetDevicePointModelView
 

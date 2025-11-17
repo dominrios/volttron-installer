@@ -1,9 +1,9 @@
 import reflex as rx
 from ..layouts.app_layout import app_layout
 from ..components.tiles import config_tile
-from ..components.buttons import icon_button_wrapper
+from ..components.ui.buttons import icon_button_wrapper
 from ..components.header.header import header
-from ..components.buttons.tile_icon import tile_icon
+from ..components.ui.buttons.tile_icon import tile_icon
 from ..navigation.state import NavigationState
 from ..components.form_components import form_entry
 from typing import Literal
@@ -106,15 +106,6 @@ def platform_page() -> rx.Component:
             padding="1rem"
         )
     )
-
-# TODO: clean up these components to make it more readable and separated. 
-# These components all work if they have the right setup which follows:
-# def function() -> rx.Component:
-#   State.working_platform: Instance = State.platforms[State.current_uid]
-#   return rx.cond(State.is_hydrated,
-#             rest of component...
-#             )
-
 
 def platform_tabs() -> rx.Component:
     # State.working_platform: Instance = State.platforms[State.current_uid]

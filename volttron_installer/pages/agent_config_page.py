@@ -2,7 +2,7 @@ import reflex as rx
 from ..layouts.app_layout import app_layout
 from ..model_views import AgentModelView, ConfigStoreEntryModelView
 from ..components.header.header import header
-from ..components.buttons import icon_button_wrapper, icon_upload, tile_icon
+from ..components.ui.buttons import icon_button_wrapper, icon_upload, tile_icon
 from ..components.form_components import *
 from ..components.custom_fields import text_editor, csv_field
 from ..components.tiles.config_tile import config_tile
