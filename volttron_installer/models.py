@@ -1,7 +1,9 @@
 from typing import Iterable, Literal
 import reflex as rx
 from loguru import logger
-from .model_views import HostEntryModelView, PlatformModelView
+
+from .model_views import HostEntryModelView, PlatformModelView, PlatformDeploymentStatusModel, AgentStatus
+from volttron_installer.backend.models import PlatformDeploymentStatus
 from enum import Enum
 
 class ConfigProblemMessages(Enum):
@@ -43,6 +45,7 @@ class Instance(rx.Base):
     # config's uncaught changes as well
     host: HostEntryModelView
     platform: PlatformModelView
+    deployment_status: PlatformDeploymentStatusModel
 
     web_bind_address: str = "http://127.0.0.1:8080"
     password: str = ""
@@ -67,6 +70,20 @@ class Instance(rx.Base):
     # Use InstanceService.has_uncaught_changes(self) instead
     # Use InstanceService.does_host_have_errors(self) instead
     # Use InstanceService.refresh_for_copy(self) instead
+
+    def total_installed_agents(self) -> int:
+        count: int = 0
+        for agent in self.platform.agents.values():
+            if agent.in_file:
+                count += 1
+        return count
+
+    def total_running_agents(self) -> int:
+        count: int = 0
+        for agent in self.deployment_status.agents.values():
+            if agent.state == "started":
+                count += 1
+        return count
 
 # Helper functions for configuration problems
 def add_configuration_problem(instance: Instance, problem: ConfigProblemMessages) -> None:

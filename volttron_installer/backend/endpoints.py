@@ -193,7 +193,7 @@ async def get_platform_status(
         if platform is not None:
             return PlatformDeploymentStatus(
                 platform_id=platform_id,
-                state="not_deployed"
+                state='not deployed'
             )
         raise HTTPException(status_code=404, detail="Platform not found")
     return deployment_status

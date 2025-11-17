@@ -19,22 +19,32 @@ def status_tab() -> rx.Component:
         rx.grid( # Quick status checks
             status_tile(
                 heading="Platform Status",
-                content="Online",
-                supplementary_text="Uptime: 12d 4h 32m"
+                content=rx.cond(
+                    State.working_platform.deployment_status.state == "running",
+                    "Online",
+                    rx.cond(
+                        State.working_platform.deployment_status.state == "deployed",
+                        "Offline",
+                        "Not Deployed"
+                    )
+                ),
+                # supplementary_text="Uptime: 12d 4h 32m"
+                supplementary_text=""
             ),
             status_tile(
                 heading="Total Agents",
-                content="8",
+                content=State.total_installed_agents,
                 supplementary_text="Installed Agents"
             ),
             status_tile(
                 heading="Active Agents",
-                content="6",
+                content=State.total_running_agents,
                 supplementary_text="Currently Running"
             ),
             status_tile(
                 heading="Health Status",
-                content="6/8",
+                # TODO: Replace with actual healthy/unhealthy agent counts
+                content=f"{State.total_running_agents} / {State.total_installed_agents}",
                 supplementary_text="Healthy Agents"
             ),
             width="100%",
@@ -494,7 +504,44 @@ def agent_configuration_tab() -> rx.Component:
                 rx.box( # Card Header
                     rx.hstack(
                         rx.text("Added Agents", size="5", weight="bold"),
+                        rx.hover_card.root(
+                            rx.hover_card.trigger(
+                                rx.icon(
+                                    "info",
+                                )
+                            ),
+                            rx.hover_card.content(
+                                rx.vstack(
+                                    rx.markdown("# Added Agents Info"),
+                                    rx.divider(),
+                                    rx.markdown(
+                                        """
+                                        **Draft** - Agent added but not configured.
+                                        Will **NOT** be included in saving/deployment.
+                                        *Save a configuration of the agent to consider it for saving/deployment.*                                    
+                                        """
+                                    ),
+                                    rx.markdown(
+                                        """
+                                        **Pending** - Agent configured and ready.
+                                        Will **BE INCLUDED** in next deployment.
+                                        *Ready for save and deploy.*                             
+                                        """
+                                    ),
+                                    rx.markdown(
+                                        """
+                                            **Installed** - Agent is installed and configured to the platform.
+                                            *Can be stopped, reconfigured, or removed.*                           
+                                        """
+                                    ),
+                                ),
+                                align="end",
+                                side="left"
+                            ),
+                            justify="between"
+                        ),
                         spacing="2",
+                        justify="between",
                         align="center"
                     ),
                     rx.text("Configure, update, or remove added agents on your platform", size="2", color="gray"),
@@ -601,7 +648,8 @@ def agent_configuration_tab() -> rx.Component:
                 rx.cond(
                     ~State.instance_savable,
                     configuration_problem_tooltip()
-                )
+                ),
+                align="end"
             ),
             justify="between",
             width="100%",
@@ -610,8 +658,7 @@ def agent_configuration_tab() -> rx.Component:
         width="100%",
     )
 
-@rx.memo
-def status_tile(heading: str, content: str, supplementary_text: str) -> rx.Component:
+def status_tile(heading: str, content: str | int, supplementary_text: str) -> rx.Component:
     return rx.box(
         rx.box( # Card Header
             rx.text(heading, size="4", color="gray", weight="bold")
@@ -635,7 +682,7 @@ def added_agent_tile(agent: AgentModelView) -> rx.Component:
             rx.box(
                 rx.hstack(
                     rx.text(agent.identity, size="5", weight="bold"),
-                    added_agent_status("deployed"),
+                    added_agent_status(agent.config_state),
                     spacing="2",
                     align="center",
                     justify="center"
@@ -679,7 +726,7 @@ def added_agent_status(config_state: str) -> rx.Component:
         A small status indicator for added agents on the added agents tile.
         Parameters:
             config_state (str): The state of the agent configuration. Can be "draft"
-              "pending", or "deployed".
+              "pending", or "installed".
     """
     return rx.badge(
         config_state,
@@ -904,15 +951,63 @@ def platform_page() -> rx.Component:
                     rx.cond(
                         State.working_platform.new_instance==False,
                         rx.fragment(
-                            rx.button(
-                                # rx.icon(""),
-                                rx.text(
-                                    rx.cond(
-                                        State.platform_deployed,
-                                        "Re-Deploy",
-                                        "Deploy"
+                            rx.dialog.root(
+                                rx.dialog.trigger(
+                                    rx.button(
+                                        # rx.icon(""),
+                                        rx.text(
+                                            rx.cond(
+                                                State.platform_deployed,
+                                                "Re-Deploy",
+                                                "Deploy"
+                                            )
+                                        ),
                                     )
                                 ),
+                                rx.dialog.content(
+                                    rx.dialog.title("Password Required"),
+                                    rx.dialog.description("To deploy, please provide your ssh password"),
+                                    rx.vstack(
+                                        rx.vstack(
+                                            form_entry.form_entry(
+                                                "Password",
+                                                rx.input(
+                                                    type="password",
+                                                    on_change=State.update_password_field,
+                                                    value=State.password_field
+                                                ),
+                                                required_entry=True
+                                            ),
+                                            align="center",
+                                            justify="center"
+                                        ),
+                                        rx.hstack(
+                                            rx.dialog.close(
+                                                rx.button(
+                                                    "Cancel",
+                                                    variant="soft",
+                                                    color_scheme="gray",
+                                                )
+                                            ),
+                                            rx.dialog.close(
+                                                rx.button(
+                                                    "Submit",
+                                                    on_click=lambda: State.handle_deploy(),
+                                                    disabled=rx.cond(
+                                                        State.password_field=="",
+                                                        True,
+                                                        False
+                                                    )
+                                                )
+                                            ),
+                                            spacing="3",
+                                            justify="end",
+                                        ),
+                                        width="100%",
+                                        padding_top="1rem",
+                                        spacing="6"
+                                    )
+                                )
                             ),
                             rx.button(
                                 # rx.icon(""),
@@ -937,6 +1032,7 @@ def platform_page() -> rx.Component:
                         tool_tip_content="Delete platform",
                         icon_key="trash-2",
                     ),
+                    align="center"
                 ),
                 justify="between",
                 width="100%",

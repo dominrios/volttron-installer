@@ -162,45 +162,199 @@ class AnsibleService:
             stderr.decode() if stderr else ""
         )
     
+    # async def get_platform_status(self, platform_id: str) -> PlatformDeploymentStatus:
+    #     """Get the status of a platform
+
+    #     Args:
+    #         platform_id: ID of the platform
+
+    #     Returns:
+    #         PlatformDeploymentStatus object
+    #     """
+    #     inventory_service = await get_inventory_service()
+    #     platform_service = await get_platform_service()
+    #     platform = await platform_service.get_platform(platform_id)
+
+    #     host = await inventory_service.get_host(platform.host_id)
+
+    #     logger.debug(f"Host: {host}")
+
+    #     # TODO need to verify the sshpassword is installed.
+    #     verify_keys = await self.verify_host_keys(host=host.id,
+    #                                                user=host.ansible_user,
+    #                                                port=host.ansible_port)
+        
+
+    #     logger.debug(f"Verify keys: {verify_keys}")
+    #     logger.debug(f"Getting status for platform {platform_id}")
+    #     if platform is None:
+    #         logger.error(f"Platform {platform_id} not found")
+        
+    #     logger.debug(f"Platform {platform_id} found: {platform}")
+        
+
+    #     #await self.verify_host_keys
+        
+    #     # return_code, stdout, stderr = await self.run_module("volttron.deployment.get_platform_status", platform_id)
+    #     # if return_code != 0:
+    #     #     raise Exception(f"Error getting platform status: {stderr}")
+        
+    #     # return PlatformDeploymentStatus.model_validate(json.loads(stdout))
+
     async def get_platform_status(self, platform_id: str) -> PlatformDeploymentStatus:
         """Get the status of a platform
-
         Args:
             platform_id: ID of the platform
-
         Returns:
             PlatformDeploymentStatus object
         """
         inventory_service = await get_inventory_service()
         platform_service = await get_platform_service()
-        platform = await platform_service.get_platform(platform_id)
-
-        host = await inventory_service.get_host(platform.host_id)
-
-        logger.debug(f"Host: {host}")
-
-        # TODO need to verify the sshpassword is installed.
-        verify_keys = await self.verify_host_keys(host=host.id,
-                                                   user=host.ansible_user,
-                                                   port=host.ansible_port)
         
+        # Initialize default status
+        status = PlatformDeploymentStatus(
+            platform_id=platform_id,
+            host_configured=False,
+            keys_verified=False,
+            state="not deployed",
+            agents={}
+        )
+        
+        try:
+            platform = await platform_service.get_platform(platform_id)
+            if platform is None:
+                logger.error(f"Platform {platform_id} not found")
+                return status
+            
+            host = await inventory_service.get_host(platform.host_id)
+            logger.debug(f"Host: {host}")
+            
+            if host is None:
+                logger.error(f"Host {platform.host_id} not found for platform {platform_id}")
+                return status
+            
+            # Check if host is properly configured
+            host_configured = bool(
+                host.ansible_user and 
+                host.ansible_port and
+                host.ansible_host
+            )
+            status.host_configured = host_configured
+            
+            if not host_configured:
+                logger.warning(f"Host {host.id} is not properly configured")
+                return status
+            
+            # Verify SSH keys
+            verify_keys = await self.verify_host_keys(
+                host=host.id,
+                user=host.ansible_user,
+                port=host.ansible_port,
+                password=getattr(host, 'ansible_password', None)
+            )
+            
+            logger.debug(f"Verify keys: {verify_keys}")
+            keys_verified = verify_keys[0] if isinstance(verify_keys, tuple) else False
+            status.keys_verified = keys_verified
+            
+            if not keys_verified:
+                logger.warning(f"SSH key verification failed for host {host.id}: {verify_keys[1] if isinstance(verify_keys, tuple) else verify_keys}")
+                return status
+            
+            # Get platform status via ansible playbook
+            try:
+                return_code, stdout, stderr = await self.run_playbook(
+                    "get_platform_status",
+                    hosts=host.id,
+                    password=getattr(host, 'ansible_password', None),
+                    extra_vars={"platform_id": platform_id}
+                )
+                
+                logger.debug(f"Platform status playbook - Return code: {return_code}, Stdout: {stdout}")
+                
+                if return_code == 0:
+                    # Parse stdout to extract platform state and agent info
+                    if "VOLTTRON_RUNNING" in stdout:
+                        status.state = "running"
+                    elif "VOLTTRON_DEPLOYED" in stdout:
+                        status.state = "deployed"
+                    else:
+                        status.state = "not deployed"
+                    
+                    # Try to extract agent information from stdout
+                    # This assumes the playbook outputs JSON with agent info
+                    try:
+                        # Look for JSON output in stdout
+                        lines = stdout.split('\n')
+                        for line in lines:
+                            if line.strip().startswith('{') and 'agents' in line:
+                                agent_data = json.loads(line.strip())
+                                if 'agents' in agent_data:
+                                    status.agents = agent_data['agents']
+                                break
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.debug(f"Could not parse agent data from stdout: {e}")
+                        
+                else:
+                    logger.warning(f"Platform status check failed: {stderr}")
+                    # Try alternative method to check if platform is at least deployed
+                    status.state = await self._check_platform_deployment(host.id, platform_id, getattr(host, 'ansible_password', None))
+                    
+            except Exception as e:
+                logger.error(f"Error running platform status playbook: {e}")
+                # Fallback to basic deployment check
+                status.state = await self._check_platform_deployment(host.id, platform_id, getattr(host, 'ansible_password', None))
+            
+            logger.debug(f"Platform {platform_id} status - State: {status.state}, Host configured: {status.host_configured}, Keys verified: {status.keys_verified}")
+            
+        except Exception as e:
+            logger.error(f"Error getting platform status for {platform_id}: {e}")
+        
+        return status
 
-        logger.debug(f"Verify keys: {verify_keys}")
-        logger.debug(f"Getting status for platform {platform_id}")
-        if platform is None:
-            logger.error(f"Platform {platform_id} not found")
-        
-        logger.debug(f"Platform {platform_id} found: {platform}")
-        
-
-        #await self.verify_host_keys
-        
-        # return_code, stdout, stderr = await self.run_module("volttron.deployment.get_platform_status", platform_id)
-        # if return_code != 0:
-        #     raise Exception(f"Error getting platform status: {stderr}")
-        
-        # return PlatformDeploymentStatus.model_validate(json.loads(stdout))
-    
+    async def _check_platform_deployment(self, host_id: str, platform_id: str, password: str = None) -> str:
+        """Check if platform is deployed using ad-hoc command
+        Args:
+            host_id: Host identifier
+            platform_id: Platform identifier  
+            password: Optional SSH password
+        Returns:
+            Platform state as string
+        """
+        try:
+            # Check if VOLTTRON is installed/deployed
+            check_command = f"test -d ~/.volttron && echo 'DEPLOYED' || echo 'NOT_DEPLOYED'"
+            
+            return_code, stdout, stderr = await self.run_volttron_ad_hoc(
+                command=check_command,
+                inventory=f"{host_id},",
+                connection="ssh",
+                password=password
+            )
+            
+            logger.debug(f"Deployment check - Return code: {return_code}, Stdout: {stdout}")
+            
+            if return_code == 0 and "DEPLOYED" in stdout:
+                # Platform is deployed, now check if it's running
+                status_command = "pgrep -f 'volttron' && echo 'RUNNING' || echo 'STOPPED'"
+                
+                return_code, stdout, stderr = await self.run_volttron_ad_hoc(
+                    command=status_command,
+                    inventory=f"{host_id},",
+                    connection="ssh", 
+                    password=password
+                )
+                
+                if return_code == 0 and "RUNNING" in stdout:
+                    return "running"
+                else:
+                    return "deployed"
+            else:
+                return "not deployed"
+                
+        except Exception as e:
+            logger.debug(f"Error checking platform deployment: {e}")
+            return "not deployed"
 
 
     async def verify_host_keys(self, host: str, user: str, port: int = 22, password: str = None) -> tuple[bool, str]:

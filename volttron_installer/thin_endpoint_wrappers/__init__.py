@@ -198,7 +198,7 @@ async def get_platform_status(platform_id: str) -> PlatformDeploymentStatus:
 @with_model(ReachableResponse)
 async def ping_resolvable_host(host_id: str) -> ReachableResponse:
     """Ping a host to check if it is reachable."""
-    return await get_request(f"{API_BASE_URL}{TASK_PREFIX}/ping/{host_id}")
+    return await get_request(f"{API_BASE_URL}{TASK_PREFIX}/ping/{host_id}", timeout = 15.0)
 
 @with_model(ToolStatusResponse)
 async def tool_status(tool_name: str) -> ToolStatusResponse:

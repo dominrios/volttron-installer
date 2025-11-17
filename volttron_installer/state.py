@@ -248,10 +248,20 @@ async def __instances_from_api__() -> dict[str, Instance]:
             volttron_venv=working_host_entry.volttron_venv,
             volttron_home=working_host_entry.volttron_home,
         )
+        platform_status_pyd = await get_platform_status(p.config.instance_name)
+        # Convert backend pydantic model/dict into reflex-friendly rx.Base model
+        try:
+            if hasattr(platform_status_pyd, "dict"):
+                platform_status = PlatformDeploymentStatusModel(**platform_status_pyd.dict())
+            else:
+                platform_status = PlatformDeploymentStatusModel(**platform_status_pyd)
+        except Exception:
+            platform_status = PlatformDeploymentStatusModel(platform_id=p.config.instance_name)
 
         instance = {
             p.config.instance_name: Instance(
                 host=host,
+                deployment_status=platform_status,
                 platform=PlatformModelView(
                     in_file=True,
                     config=PlatformConfigModelView(
@@ -263,6 +273,8 @@ async def __instances_from_api__() -> dict[str, Instance]:
                             identity=identity,
                             source=agent.source,
                             routing_id=identity,
+                            in_file=True,
+                            config_state="installed",
                             safe_agent={
                                 "identity" : identity,
                                 "source" : agent.source,
@@ -322,7 +334,13 @@ class PlatformPageState(rx.State):
         #     platform=PlatformModelView()
         # )
     }
-    _working_platform: Instance = Instance(host=HostEntryModelView(), platform=PlatformModelView())
+    _working_platform: Instance = Instance(
+        host=HostEntryModelView(),
+        platform=PlatformModelView(),
+        deployment_status=PlatformDeploymentStatusModel(
+            platform_id="volttron1"
+        )
+    )
     list_of_agents: list[AgentModelView] = []
 
     _host_resolvable: bool = True
@@ -341,7 +359,14 @@ class PlatformPageState(rx.State):
 
     @rx.var
     def working_platform(self) -> Instance:
-        self._working_platform = self.platforms.get(self.current_uid, Instance(host=HostEntryModelView(), platform=PlatformModelView()))
+        self._working_platform = self.platforms.get(
+            self.current_uid,
+            Instance(
+                host=HostEntryModelView(),
+                platform=PlatformModelView(),
+                deployment_status=PlatformDeploymentStatusModel(platform_id="")
+            )
+        )
         return self._working_platform
 
     @rx.var(cache=True)
@@ -367,6 +392,26 @@ class PlatformPageState(rx.State):
             return " "
         else:
             return working_platform.platform.safe_platform['config']['instance_name']
+
+    @rx.var
+    def total_installed_agents(self) -> int:
+        if self.current_uid == "":
+            return 0
+        working_platform: Instance | None = self.platforms.get(self.current_uid, None)
+        if working_platform is None:
+            return 0
+        else:
+            return working_platform.total_installed_agents()
+
+    @rx.var
+    def total_running_agents(self) -> int:
+        if self.current_uid == "":
+            return 0
+        working_platform: Instance | None = self.platforms.get(self.current_uid, None)
+        if working_platform is None:
+            return 0
+        else:
+            return working_platform.total_running_agents()
 
     # === vars for platform details ===
     @rx.var
@@ -498,7 +543,9 @@ class PlatformPageState(rx.State):
         if working_platform is None:
             return False
         else:
-            return self.check_instance_savable(working_platform)
+            savable = self.check_instance_savable(working_platform)
+            # logger.debug(f"instance savable check for `{self.current_uid}` : {savable}")
+            return savable
     
     @rx.var 
     def instance_uncaught(self) -> bool:
@@ -921,9 +968,9 @@ class PlatformPageState(rx.State):
             # logger.debug(f"Ansible user is empty: {host_dict['ansible_user'] == ''}")
             # logger.debug(f"Ansible port is not numeric: {host_dict['ansible_port'].isdigit() == False}")
             # logger.debug(f"Ansible host is empty: {host_dict['ansible_host'] == ''}")
-            # logger.debug(f"Host is not resolvable: {self.is_host_resolvable == False}")
-            # logger.debug(f"Host is currently pinging: {self.host_pinging}")
-            # logger.debug(f"Host is not resolved: {self.host_resolved == False}")
+            # logger.debug(f"Host resolvability: {self.is_host_resolvable}")
+            # logger.debug(f"Host pinging: {self.host_pinging}")
+            # logger.debug(f"Host resolved state: {self.host_resolved}")
             # logger.debug(f"Here is the host to prove: {host_dict}")
             savable = False
 

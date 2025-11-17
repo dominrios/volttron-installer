@@ -96,7 +96,7 @@ class AgentModelView(rx.Base):
     source: str = ""
     config: str = ""
     config_store: list[ConfigStoreEntryModelView] = []
-    config_sate: Literal["draft", "pending", "deployed"] = "pending"
+    config_state: Literal["draft", "pending", "installed"] = "draft"
 
     contains_errors: bool = False
     is_new: bool = False
@@ -109,6 +109,10 @@ class AgentModelView(rx.Base):
     selected_agent_config_tab: str = "1"
     selected_config_component_id: str = ""
     routing_id: str = ""
+
+    def has_changes(self) -> bool:
+        """Check if agent has unsaved changes compared to the safe state."""
+        return self.safe_agent != self.to_dict()
 
     def to_dict(self) -> dict[str, Any]:
         # from loguru import logger
@@ -238,3 +242,14 @@ class BACnetDeviceModelView(rx.Base):
     # UI driven field
     select_all_points: bool = False
     read_device_all_failed: bool = False
+
+class AgentStatus(rx.Base):
+    identity: str = ""
+    state: Literal["not deployed", "deployed", "started", "stopped"] = "not deployed"
+
+class PlatformDeploymentStatusModel(rx.Base):
+    platform_id: str = ""
+    host_configured: bool = False
+    keys_verified: bool = False
+    state: Literal["not deployed", "deployed", "running"] = "not deployed"
+    agents: dict[str, AgentStatus] = {}
