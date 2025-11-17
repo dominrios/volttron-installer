@@ -198,6 +198,7 @@ class PlatformPageState(rx.State, FormStateMixin):
     _form_errors: Dict[str, str] = {}
     _form_dirty: Dict[str, bool] = {}
     _form_initialized: bool = False
+    _last_initialized_platform_uid: str = ""  # Track which platform we last initialized for
     
     # Field mapping for form-to-model sync
     HOST_FORM_MAPPING = {
@@ -486,9 +487,15 @@ class PlatformPageState(rx.State, FormStateMixin):
         """Initialize form state from current working platform."""
         if self.current_uid in self.platforms:
             working_platform = self.working_platform
-            # Call the mixin method to initialize form from model
-            FormStateMixin.initialize_form_from_model(self, working_platform, self.ALL_FORM_MAPPING)
-            self._form_initialized = True
+            # Always re-initialize form from model if:
+            # 1. Form was never initialized, OR
+            # 2. We're viewing a different platform than last time
+            # This ensures form state always reflects the current platform model
+            if not self._form_initialized or self._last_initialized_platform_uid != self.current_uid:
+                # Call the mixin method to initialize form from model
+                FormStateMixin.initialize_form_from_model(self, working_platform, self.ALL_FORM_MAPPING)
+                self._last_initialized_platform_uid = self.current_uid
+                self._form_initialized = True
 
     @rx.event(background=True)
     async def delete_temp_uid(self, uid_copy: str):
@@ -703,10 +710,15 @@ class PlatformPageState(rx.State, FormStateMixin):
         validator = validators.get(field)
         self.update_form_field(form_field, value, validator)
         
+        # Sync form to model immediately to preserve changes across navigation
+        # This ensures unsaved form data is preserved in the model
+        if self.session_hydrated and self.current_uid in self.platforms:
+            working_platform = self.platforms[self.current_uid]
+            self.sync_form_to_model(working_platform, self.ALL_FORM_MAPPING)
+        
         # Reset host resolved state when host changes (for reachability check)
         if field == "ansible_host":
             self._host_resolved = False
-            # Note: Model is NOT updated here - only on save/cancel
 
     @rx.event
     def update_platform_config_detail(self, field: str, value: str):
@@ -746,7 +758,11 @@ class PlatformPageState(rx.State, FormStateMixin):
         validator = validators.get(field)
         self.update_form_field(form_field, value, validator)
         
-        # Note: Model is NOT updated here - only on save/cancel
+        # Sync form to model immediately to preserve changes across navigation
+        # This ensures unsaved form data is preserved in the model
+        if self.session_hydrated and self.current_uid in self.platforms:
+            working_platform = self.platforms[self.current_uid]
+            self.sync_form_to_model(working_platform, self.ALL_FORM_MAPPING)
 
     @rx.event
     async def handle_deploy(self):

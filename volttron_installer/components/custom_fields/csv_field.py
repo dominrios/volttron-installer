@@ -1,10 +1,9 @@
 import reflex as rx
-from ..buttons import add_icon_button, icon_button_wrapper
+from ..ui.buttons import add_icon_button, icon_button_wrapper
 from ..form_components import form_entry
 from typing import Dict, List, Optional
 from ...model_views import ConfigStoreEntryModelView
 from loguru import logger
-#version 1
 from ..form_components import form_entry
 from ...state import AgentConfigState
 
