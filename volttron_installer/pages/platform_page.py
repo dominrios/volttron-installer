@@ -13,7 +13,7 @@ from ..models import Instance
 
 parts = Literal["connection", "instance_configuration"]
 
-@rx.page(route="/platform/[uid]", on_load=State.hydrate_state)
+@rx.page(route="/platform/[uid]", on_load=[State.hydrate_state, State.initialize_form_from_model])
 def platform_page() -> rx.Component:
 
     # State.working_platform: Instance = State.platforms[State.current_uid]
@@ -170,11 +170,11 @@ def configuration_tab_content() -> rx.Component:
                                 form_entry.form_entry(
                                     "Host",
                                     rx.input(
-                                        value= State.working_platform.host.ansible_host,
-                                        on_change=lambda v: State.update_detail("id", v),
+                                        value= State.form_ansible_host,
+                                        on_change=lambda v: State.update_form_host_field("ansible_host", v),
                                         size="3",
                                         required=True,
-                                        on_blur=lambda: State.determine_host_reachability(State.working_platform),
+                                        on_blur=lambda: State.determine_host_reachability(),
                                         color_scheme = rx.cond(
                                             State.is_host_resolvable,
                                             "gray",
@@ -185,10 +185,6 @@ def configuration_tab_content() -> rx.Component:
                                     upload=rx.cond(
                                         State.host_pinging,
                                         rx.spinner(),
-                                        # rx.tooltip(
-                                        #     "Resolving host...",    
-                                        #     rx.spinner()
-                                        # ),
                                         rx.cond(
                                             State.is_host_resolvable,
                                             tile_icon(
@@ -199,19 +195,28 @@ def configuration_tab_content() -> rx.Component:
                                             )
                                         )
                                     ),
-                                    below_component=rx.cond(
-                                        State.is_host_resolvable == False,
-                                        rx.text(
-                                            "Host must be a valid domain or ip address", 
-                                            color_scheme="red"
+                                    below_component=rx.fragment(
+                                        rx.cond(
+                                            State.form_error_ansible_host != "",
+                                            rx.text(
+                                                State.form_error_ansible_host,
+                                                color_scheme="red"
+                                            )
+                                        ),
+                                        rx.cond(
+                                            State.is_host_resolvable == False,
+                                            rx.text(
+                                                "Host must be a valid domain or ip address", 
+                                                color_scheme="red"
+                                            )
                                         )
                                     ),
                                 ),
                                 form_entry.form_entry(
                                     "Username",
                                     rx.input(
-                                        value= State.working_platform.host.ansible_user,
-                                        on_change=lambda v: State.update_detail("ansible_user", v),
+                                        value= State.form_ansible_user,
+                                        on_change=lambda v: State.update_form_host_field("ansible_user", v),
                                         size="3",
                                         required=True,
                                     ),
@@ -220,20 +225,27 @@ def configuration_tab_content() -> rx.Component:
                                         tooltip="Username must have SUDO permissions"
                                     ),
                                     required_entry=True,
+                                    below_component=rx.cond(
+                                        State.form_error_ansible_user != "",
+                                        rx.text(
+                                            State.form_error_ansible_user,
+                                            color_scheme="red"
+                                        )
+                                    ),
                                 ),
                                 form_entry.form_entry(
                                     "Port SSH",
                                     rx.input(
-                                        value= State.working_platform.host.ansible_port,
-                                        on_change=lambda v: State.update_detail("ansible_port", v),
+                                        value= State.form_ansible_port,
+                                        on_change=lambda v: State.update_form_host_field("ansible_port", v),
                                         size="3",
                                         required=True,
                                     ),
                                     required_entry=True,
                                     below_component=rx.cond(
-                                        State.connection_ansible_port_validity == False,
+                                        State.form_error_ansible_port != "",
                                         rx.text(
-                                            "Port SSH must be a valid port number", 
+                                            State.form_error_ansible_port,
                                             color_scheme="red"
                                         )
                                     ),
@@ -256,29 +268,50 @@ def configuration_tab_content() -> rx.Component:
                                         form_entry.form_entry(
                                             "HTTP Proxy",
                                             rx.input(
-                                                value= State.working_platform.host.http_proxy,
-                                                on_change=lambda v: State.update_detail("http_proxy", v),
+                                                value= State.form_http_proxy,
+                                                on_change=lambda v: State.update_form_host_field("http_proxy", v),
                                                 size="3",
                                                 required=True,
-                                            )
+                                            ),
+                                            below_component=rx.cond(
+                                                State.form_error_http_proxy != "",
+                                                rx.text(
+                                                    State.form_error_http_proxy,
+                                                    color_scheme="red"
+                                                )
+                                            ),
                                         ),
                                         form_entry.form_entry(
                                             "HTTPS Proxy",
                                             rx.input(
-                                                value= State.working_platform.host.https_proxy,
-                                                on_change=lambda v: State.update_detail("https_proxy", v),
+                                                value= State.form_https_proxy,
+                                                on_change=lambda v: State.update_form_host_field("https_proxy", v),
                                                 size="3",
                                                 required=True,
-                                            )
+                                            ),
+                                            below_component=rx.cond(
+                                                State.form_error_https_proxy != "",
+                                                rx.text(
+                                                    State.form_error_https_proxy,
+                                                    color_scheme="red"
+                                                )
+                                            ),
                                         ),
                                         form_entry.form_entry(
                                             "VOLTTRON Home",
                                             rx.input(
-                                                value= State.working_platform.host.volttron_home,
-                                                on_change=lambda v: State.update_detail("volttron_home", v),
+                                                value= State.form_volttron_home,
+                                                on_change=lambda v: State.update_form_host_field("volttron_home", v),
                                                 size="3",
                                                 required=True,
-                                            )
+                                            ),
+                                            below_component=rx.cond(
+                                                State.form_error_volttron_home != "",
+                                                rx.text(
+                                                    State.form_error_volttron_home,
+                                                    color_scheme="red"
+                                                )
+                                            ),
                                         ),
                                     )
                                 ),
@@ -300,17 +333,17 @@ def configuration_tab_content() -> rx.Component:
                                     rx.vstack(
                                         rx.input(
                                             size="3",
-                                            value=State.working_platform.platform.config.instance_name,
-                                            on_change=lambda v: State.update_platform_config_detail("instance_name", v),
+                                            value=State.form_instance_name,
+                                            on_change=lambda v: State.update_form_platform_field("instance_name", v),
                                             required=True,
                                         ),
                                         align="center"
                                     ),
                                     below_component=rx.fragment(
                                         rx.cond(
-                                            State.platform_instance_name_validity == False,
+                                            State.form_error_instance_name != "",
                                             rx.text(
-                                                "Instance Name must contain only letters, numbers, hyphens, and underscores", 
+                                                State.form_error_instance_name,
                                                 color_scheme="red"
                                             )
                                         ),
@@ -333,16 +366,16 @@ def configuration_tab_content() -> rx.Component:
                                     rx.vstack(
                                         rx.input(
                                             size="3",
-                                            value=State.working_platform.platform.config.vip_address,
-                                            on_change=lambda v: State.update_platform_config_detail("vip_address", v),
+                                            value=State.form_vip_address,
+                                            on_change=lambda v: State.update_form_platform_field("vip_address", v),
                                             required=True,
                                         ),  
                                         align="center"
                                     ),
                                     below_component=rx.cond(
-                                        State.platform_vip_address_validity == False,
+                                        State.form_error_vip_address != "",
                                         rx.text(
-                                            "Vip Address must be in the format tcp://<ip>:<port>", 
+                                            State.form_error_vip_address,
                                             color_scheme="red"
                                         )
                                     ),
@@ -384,10 +417,17 @@ def configuration_tab_content() -> rx.Component:
                                             "Web Bind Address",
                                             rx.input(
                                                 size="3",
-                                                value=State.working_platform.web_bind_address,
-                                                on_change=lambda v: State.update_platform_config_detail("web_bind_address", v),
+                                                value=State.form_web_bind_address,
+                                                on_change=lambda v: State.update_form_platform_field("web_bind_address", v),
                                                 required=True,
-                                            )
+                                            ),
+                                            below_component=rx.cond(
+                                                State.form_error_web_bind_address != "",
+                                                rx.text(
+                                                    State.form_error_web_bind_address,
+                                                    color_scheme="red"
+                                                )
+                                            ),
                                         )
                                     )
                                 ),
