@@ -154,6 +154,7 @@ def agent_config_page() -> rx.Component:
                                                                     ),
                                                                     rx.text(
                                                                         "Path must start with a letter and can only contain letters, numbers, underscores, periods, or hyphens.",
+                                                                        size="2",
                                                                         color_scheme=rx.cond(
                                                                             AgentConfigState.path_validity == False,
                                                                             "red",
@@ -195,6 +196,7 @@ def agent_config_page() -> rx.Component:
                                                                             ~AgentConfigState.config_json_validity,
                                                                             rx.text(
                                                                                 "Must be valid JSON",
+                                                                                size="2",
                                                                                 color_scheme="red"
                                                                             )
                                                                         )
@@ -213,6 +215,7 @@ def agent_config_page() -> rx.Component:
                                                                             AgentConfigState.check_csv_validity == False,
                                                                             rx.text(
                                                                                 "Invalid CSV variant detected",
+                                                                                size="2",
                                                                                 color_scheme="red"
                                                                             )
                                                                         ),
@@ -533,6 +536,7 @@ def agent_config_tab() -> rx.Component:
                 ),
                 rx.text(
                     "Identity must start with a letter and can only contain letters, numbers, underscores, periods, or hyphens.",
+                    size="2",
                     color_scheme=rx.cond(
                         ~AgentConfigState.agent_identity_validity,
                         "red",
@@ -557,6 +561,7 @@ def agent_config_tab() -> rx.Component:
                 ),
                 rx.text(
                     "Source must be a valid path",
+                    size="2",
                     color_scheme=rx.cond(
                         ~AgentConfigState.agent_source_validity,
                         "red",
@@ -583,6 +588,7 @@ def agent_config_tab() -> rx.Component:
                     ~AgentConfigState.agent_config_validity,
                     rx.text(
                         "Invalid JSON or YAML detected.",
+                        size="2",
                         color_scheme="red"
                     )
                 )
