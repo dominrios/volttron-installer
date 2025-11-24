@@ -305,12 +305,26 @@ async def handle_save(self):
 
 ## Conclusion
 
-**Yes, there is still significant model reliance.** The form state exists but acts as a "shadow" that immediately syncs to the model. To complete the migration:
+**Platform Page: ✅ COMPLETE** - Form state is now the source of truth during editing.
 
-1. **Stop updating model on every keystroke**
-2. **Make validation read from form state**
-3. **Make business logic check form state**
-4. **Only sync form → model on save**
+**Agent Config Page: ✅ COMPLETE** - Form state is now the source of truth during editing.
 
-This will make form state the true source of truth during editing, with the model only updated when the user commits changes.
+### Platform Page Status:
+1. ✅ **Model updates removed from form handlers** - Model only updates on save
+2. ✅ **Validation reads from form state** - All validation methods use form state
+3. ✅ **Business logic checks form state** - Save/cancel handlers use form state
+4. ✅ **Form → model sync only on save** - Clear commit boundary
+
+### Agent Config Page Status:
+1. ✅ **Form state management for config store** - `form_config_path`, `form_config_data_type`, `form_config_value`
+2. ✅ **Live validation** - All validations check form state and update in real-time
+3. ✅ **Data type switching** - JSON/CSV switching updates form state reactively
+4. ✅ **Save syncs form to model** - Form state syncs to model before saving
+5. ✅ **Agent form validation** - Identity, source, and config (JSON/YAML) validated from form state
+
+### Remaining Work:
+- BACnet Scan Page still uses model-based forms
+- Consider removing legacy model-based validation methods (optional cleanup)
+
+The form state migration is now complete for both Platform Page and Agent Config Page, with form state as the true source of truth during editing.
 

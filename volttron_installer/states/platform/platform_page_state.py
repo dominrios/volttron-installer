@@ -958,7 +958,7 @@ class PlatformPageState(rx.State, FormStateMixin):
         # Check if platform details are valid using form state
         platform_valid, platform_valid_map = self.form_platform_validity()
         if platform_valid == False:
-            logger.debug("Platform form fields are not valid")
+            # logger.debug("Platform form fields are not valid")
             savable = False
 
         return savable

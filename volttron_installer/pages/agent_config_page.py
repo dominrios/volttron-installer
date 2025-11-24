@@ -1,21 +1,12 @@
 import reflex as rx
 from ..layouts.app_layout import app_layout
-from ..model_views import AgentModelView, ConfigStoreEntryModelView
 from ..components.header.header import header
 from ..components.ui.buttons import icon_button_wrapper, icon_upload, tile_icon
 from ..components.form_components import *
 from ..components.custom_fields import text_editor, csv_field
 from ..components.tiles.config_tile import config_tile
-from ..utils.create_component_uid import generate_unique_uid
-from .platform_page import State as AppState
-from .platform_page import Instance
 from ..navigation.state import NavigationState
-from ..utils.conversion_methods import json_string_to_csv_string, csv_string_to_json_string, identify_string_format, csv_string_to_usable_dict
-from ..utils.validate_content import check_json, check_csv, check_path, check_yaml, check_regular_expression
-from ..utils.create_csv_string import create_csv_string, create_and_validate_csv_string
 from ..state import AgentConfigState
-import io, re, json, csv, yaml
-from loguru import logger
 
 @rx.page(route="/platform/[uid]/agent/[agent_uid]", on_load=AgentConfigState.hydrate_working_agent)
 def agent_config_page() -> rx.Component:
@@ -161,11 +152,12 @@ def agent_config_page() -> rx.Component:
                                                                             "gray"
                                                                         ),
                                                                     ),
-                                                                    rx.cond(
-                                                                        AgentConfigState.path_validity == False,
-                                                                        rx.text(
-                                                                            "Path must start with a letter and can only contain letters, numbers, underscores, periods, or hyphens.",
-                                                                            color_scheme="red"
+                                                                    rx.text(
+                                                                        "Path must start with a letter and can only contain letters, numbers, underscores, periods, or hyphens.",
+                                                                        color_scheme=rx.cond(
+                                                                            AgentConfigState.path_validity == False,
+                                                                            "red",
+                                                                            "gray"
                                                                         )
                                                                     )
                                                                 ),
@@ -200,9 +192,9 @@ def agent_config_page() -> rx.Component:
                                                                             on_change=lambda v: AgentConfigState.update_config_detail("value", v)
                                                                         ),
                                                                         rx.cond(
-                                                                            AgentConfigState.config_json_validity == False,
+                                                                            ~AgentConfigState.config_json_validity,
                                                                             rx.text(
-                                                                                "Invalid JSON detected",
+                                                                                "Must be valid JSON",
                                                                                 color_scheme="red"
                                                                             )
                                                                         )
@@ -410,7 +402,7 @@ def agent_draft() -> rx.Component:
                             AgentConfigState.committed_configs,
                             lambda config: rx.vstack(
                                 rx.divider(),
-                                # Checking if our config is uncaught
+                                # Checking if our config has unsaved changes
                                 rx.cond(
                                     AgentConfigState.changed_configs_list.contains(config.component_id),
                                     rx.container(
@@ -539,11 +531,12 @@ def agent_config_tab() -> rx.Component:
                         "gray"
                     )
                 ),
-                rx.cond(
-                    AgentConfigState.form_error_agent_identity != "",
-                    rx.text(
-                        AgentConfigState.form_error_agent_identity,
-                        color_scheme="red"
+                rx.text(
+                    "Identity must start with a letter and can only contain letters, numbers, underscores, periods, or hyphens.",
+                    color_scheme=rx.cond(
+                        ~AgentConfigState.agent_identity_validity,
+                        "red",
+                        "gray"
                     )
                 ),
             ),
@@ -562,13 +555,14 @@ def agent_config_tab() -> rx.Component:
                         "gray"
                     )
                 ),
-                rx.cond(
-                    AgentConfigState.form_error_agent_source != "",
-                    rx.text(
-                        AgentConfigState.form_error_agent_source,
-                        color_scheme="red"
+                rx.text(
+                    "Source must be a valid path",
+                    color_scheme=rx.cond(
+                        ~AgentConfigState.agent_source_validity,
+                        "red",
+                        "gray"
                     )
-                )
+                ),
             ),
             required_entry=True
         ),
@@ -586,12 +580,12 @@ def agent_config_tab() -> rx.Component:
                     ),
                 ),
                 rx.cond(
-                    AgentConfigState.form_error_agent_config != "",
+                    ~AgentConfigState.agent_config_validity,
                     rx.text(
-                        AgentConfigState.form_error_agent_config,
+                        "Invalid JSON or YAML detected.",
                         color_scheme="red"
                     )
-                ),
+                )
             ),
             upload=rx.upload.root( 
                 icon_upload.icon_upload(),

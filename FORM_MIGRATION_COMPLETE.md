@@ -172,10 +172,77 @@ All form input fields now use form state as the source of truth:
 
 ---
 
+---
+
+## ✅ Agent Config Page Form Migration - COMPLETE
+
+### Changes Implemented
+
+#### 1. Agent Form Fields Migration ✅
+
+**Migrated Fields:**
+- `form_agent_identity` - Agent identity with format validation
+- `form_agent_source` - Agent source with required validation
+- `form_agent_config` - Agent config with JSON/YAML validation
+
+**Files Changed:**
+- `volttron_installer/states/mixins/agent_form_state_mixin.py`
+- `volttron_installer/pages/agent_config_page.py`
+
+**Validation Updates:**
+- ✅ Identity: Validates format (letters, numbers, underscores, hyphens)
+- ✅ Source: Validates required field
+- ✅ Config: Validates JSON or YAML format (supports both)
+
+#### 2. Config Store Form Fields Migration ✅
+
+**Migrated Fields:**
+- `form_config_path` - Config store entry path
+- `form_config_data_type` - Data type (JSON/CSV)
+- `form_config_value` - Config value
+
+**Files Changed:**
+- `volttron_installer/states/platform/agent_config_state.py`
+- `volttron_installer/pages/agent_config_page.py`
+
+**Key Changes:**
+- ✅ Form state is source of truth during editing
+- ✅ UI binds to form state fields instead of model fields
+- ✅ Live validation updates as user types
+- ✅ Data type switching (JSON/CSV) updates form state reactively
+
+#### 3. Form State Management ✅
+
+**Updated Methods:**
+- `update_config_detail()` - Now updates form state first, then syncs to model
+- `save_config_store_entry()` - Syncs form state to model before saving
+- `set_component_id()` - Initializes form state from selected entry
+
+**Validation Methods:**
+- `path_validity` - Checks form state instead of model
+- `config_json_validity` - Checks form state instead of model
+- `check_csv_validity` - Checks form state instead of model
+- `entry_config_validity` - Checks form state instead of model
+
+**Files Changed:**
+- `volttron_installer/states/platform/agent_config_state.py` (lines 294-404, 451-510)
+
+#### 4. Enhanced Config Validation ✅
+
+**Updated:**
+- Agent config validation now supports both JSON and YAML formats
+- Validation checks JSON first, then YAML if JSON fails
+- Clear error message: "Invalid configuration: must be valid JSON or YAML"
+
+**Files Changed:**
+- `volttron_installer/states/mixins/agent_form_state_mixin.py` (lines 123-146)
+
+---
+
 ## Next Steps
 
 1. Test thoroughly to ensure all functionality works
-2. Consider migrating other pages (Agent Config, BACnet Scan)
+2. Consider migrating other pages (BACnet Scan)
 3. Remove legacy model-based validation methods (optional cleanup)
 4. Document form state patterns for future development
 

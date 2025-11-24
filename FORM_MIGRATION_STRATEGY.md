@@ -129,11 +129,14 @@ Once all pages are migrated:
 - [ ] Update save/cancel handlers
 - [ ] Test validation
 
-### Agent Config Page
-- [ ] Add FormStateMixin to AgentConfigState
-- [ ] Migrate agent form fields
-- [ ] Migrate config store entry forms
-- [ ] Update save handlers
+### Agent Config Page ✅
+- [x] Add FormStateMixin to AgentConfigState
+- [x] Migrate agent form fields (identity, source, config)
+- [x] Migrate config store entry forms (path, data_type, value)
+- [x] Update save handlers
+- [x] Add live validation for all fields
+- [x] Support JSON/YAML validation for agent config
+- [x] Implement form state management for config store entries
 
 ### BACnet Scan Page
 - [ ] Add FormStateMixin to BacnetScanState

@@ -94,6 +94,8 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
         if not self._form_initialized or self._last_initialized_agent_uid != current_agent_uid:
             self.initialize_agent_form(self.working_agent)
             self._last_initialized_agent_uid = current_agent_uid
+            # Flash validation errors to ensure they're visible for blank agents
+            self.flash_validation_errors()
         
         self.session_hydrated = True
     
@@ -151,7 +153,9 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
     def update_form_agent_field(self, field: str, value: str):
         """Update agent form field with validation (event handler wrapper)."""
         # Call the mixin method to update form state
+        logger.debug(f"update_form_agent_field: {field} {value}")
         AgentFormStateMixin.update_form_agent_field(self, field, value)
+        logger.debug(f"update_form_agent_field: {self._form_errors}")
         # Sync form to model immediately to preserve changes across navigation
         # This ensures unsaved form data is preserved in the model
         # Only sync if we have a valid working agent (hydration complete)
@@ -348,7 +352,8 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
         # Validate and update entry state using form state
         valid, validity_map = self.validate_config_entry_from_form_state(entry)
         entry.valid = valid
-        entry.changed = entry.dict() != entry.safe_entry
+        # Update changed flag using reliable comparison (form state for selected entry)
+        entry.changed = self._config_entry_has_changes(entry)
     
     @rx.event
     def save_config_store_entry(self, config: ConfigStoreEntryModelView):
@@ -414,6 +419,7 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
         # Save the entry
         entry.safe_entry = entry.dict()
         entry.uncommitted = False
+        entry.changed = False  # Reset changed flag after saving
         
         # Update in config_store
         for i, store_entry in enumerate(self.working_agent.config_store):
@@ -456,17 +462,17 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
     @rx.var
     def agent_identity_validity(self) -> bool:
         """Check agent identity validity using form state."""
-        return self.form_error_agent_identity == ""
+        return self._form_errors.get('form_agent_identity', '') == ''
     
     @rx.var
     def agent_source_validity(self) -> bool:
         """Check agent source validity using form state."""
-        return self.form_error_agent_source == ""
+        return self._form_errors.get('form_agent_source', '') == ''
     
     @rx.var
     def agent_config_validity(self) -> bool:
         """Check agent config validity using form state."""
-        return self.form_error_agent_config == ""
+        return self._form_errors.get('form_agent_config', '') == ''
     
     @rx.var
     def path_validity(self) -> bool:
@@ -529,14 +535,78 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
         
         return valid, validity_map
     
+    def _config_entry_has_changes(self, entry: ConfigStoreEntryModelView) -> bool:
+        """
+        Check if a config entry has unsaved changes.
+        
+        For the currently selected entry, checks form state vs safe_entry.
+        For other entries, checks model state vs safe_entry.
+        Only compares relevant fields: path, data_type, value.
+        """
+        if entry.component_id == self.working_agent.selected_config_component_id:
+            # For selected entry, compare form state to safe_entry
+            current_state = {
+                "path": self.form_config_path,
+                "data_type": self.form_config_data_type,
+                "value": self.form_config_value
+            }
+        else:
+            # For other entries, compare model state to safe_entry
+            current_state = {
+                "path": entry.path,
+                "data_type": entry.data_type,
+                "value": entry.value
+            }
+        
+        # Compare only relevant fields
+        safe_state = {
+            "path": entry.safe_entry.get("path", ""),
+            "data_type": entry.safe_entry.get("data_type", "JSON"),
+            "value": entry.safe_entry.get("value", "")
+        }
+        
+        return current_state != safe_state
+    
+    def is_config_changed(self, component_id: str) -> bool:
+        """
+        Check if a specific config entry has unsaved changes.
+        This method can be called from UI with component_id as parameter.
+        
+        Args:
+            component_id: The component ID of the config entry to check
+            
+        Returns:
+            True if the config entry has unsaved changes
+        """
+        # Find the config entry
+        entry = None
+        for config in self.working_agent.config_store:
+            if config.component_id == component_id:
+                entry = config
+                break
+        
+        if entry is None:
+            return False
+        
+        # Only check committed entries (uncommitted entries are new)
+        if entry.uncommitted:
+            return False
+        
+        return self._config_entry_has_changes(entry)
+    
     @rx.var
     def changed_configs_list(self) -> list[str]:
-        """Get list of component IDs for changed config entries."""
-        return [
+        """Get list of component IDs for changed config entries.
+        
+        Uses the 'changed' flag on each entry, which is maintained
+        by update_config_detail() using reliable comparison.
+        """
+        toReturn = [
             config.component_id
             for config in self.working_agent.config_store
-            if config.dict() != config.safe_entry
+            if not config.uncommitted and config.changed
         ]
+        return toReturn
     
     @rx.var
     def committed_configs(self) -> list[ConfigStoreEntryModelView]:
@@ -547,6 +617,7 @@ class AgentConfigState(AgentFormStateMixin, rx.State):
                 data_type=config.safe_entry.get("data_type", "JSON"),
                 value=config.safe_entry.get("value", ""),
                 csv_variants=config.csv_variants,
+                component_id=config.component_id,  # Include component_id so changed checks work
             )
             for config in self.working_agent.config_store
             if not config.uncommitted and config.safe_entry.get("path", "") != ""

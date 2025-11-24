@@ -49,13 +49,21 @@ class FormStateMixin:
             self._form_errors = {}
         if not hasattr(self, '_form_dirty'):
             self._form_dirty = {}
-            
+        
+        # Build new dicts to trigger reactivity
+        new_dirty = {**self._form_dirty}
+        new_errors = {**self._form_errors}
+        
         for form_field, model_path in field_mapping.items():
             value = self._get_nested_attr(model, model_path)
             if hasattr(self, form_field):
                 setattr(self, form_field, value)
-            self._form_dirty[form_field] = False
-            self._form_errors[form_field] = ""
+            new_dirty[form_field] = False
+            new_errors[form_field] = ""
+        
+        # Reassign to trigger reactivity
+        self._form_dirty = new_dirty
+        self._form_errors = new_errors
     
     def _get_nested_attr(self, obj: Any, path: str) -> Any:
         """Get nested attribute using dot notation."""
@@ -104,17 +112,16 @@ class FormStateMixin:
             self._form_dirty = {}
         if not hasattr(self, '_form_errors'):
             self._form_errors = {}
-            
-        self._form_dirty[field] = True
         
+        # Update dirty state (reassign dict to trigger reactivity)
+        self._form_dirty = {**self._form_dirty, field: True}
+        
+        # Validate and update errors (reassign dict to trigger reactivity)
         if validator:
             is_valid, error_msg = validator(value)
-            if is_valid:
-                self._form_errors[field] = ""
-            else:
-                self._form_errors[field] = error_msg
+            self._form_errors = {**self._form_errors, field: "" if is_valid else error_msg}
         else:
-            self._form_errors[field] = ""
+            self._form_errors = {**self._form_errors, field: ""}
     
     def sync_form_to_model(self, model: Any, field_mapping: Dict[str, str]) -> None:
         """
@@ -141,13 +148,21 @@ class FormStateMixin:
             self._form_dirty = {}
         if not hasattr(self, '_form_errors'):
             self._form_errors = {}
-            
+        
+        # Build new dicts to trigger reactivity
+        new_dirty = {**self._form_dirty}
+        new_errors = {**self._form_errors}
+        
         for form_field, model_path in field_mapping.items():
             value = self._get_nested_attr(model, model_path)
             if hasattr(self, form_field):
                 setattr(self, form_field, value)
-            self._form_dirty[form_field] = False
-            self._form_errors[form_field] = ""
+            new_dirty[form_field] = False
+            new_errors[form_field] = ""
+        
+        # Reassign to trigger reactivity
+        self._form_dirty = new_dirty
+        self._form_errors = new_errors
     
     def get_form_field(self, field: str, default: Any = "") -> Any:
         """Get form field value."""
@@ -185,10 +200,18 @@ class FormStateMixin:
             self._form_errors = {}
         if not hasattr(self, '_form_dirty'):
             self._form_dirty = {}
-            
+        
+        # Build new dicts to trigger reactivity
+        new_dirty = {**self._form_dirty}
+        new_errors = {**self._form_errors}
+        
         for form_field in field_mapping.keys():
             if hasattr(self, form_field):
                 setattr(self, form_field, "")
-            self._form_errors[form_field] = ""
-            self._form_dirty[form_field] = False
+            new_errors[form_field] = ""
+            new_dirty[form_field] = False
+        
+        # Reassign to trigger reactivity
+        self._form_dirty = new_dirty
+        self._form_errors = new_errors
 

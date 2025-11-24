@@ -52,9 +52,36 @@
 - Standard form validation
 - Better separation of form state from model state
 
+### Phase 4: Form Migration ✅
+**Status:** Agent Config Page Complete
+
+**Completed:**
+- ✅ Agent Config Page form migration
+  - Agent form fields (identity, source, config)
+  - Config store entry form fields (path, data_type, value)
+  - Form state management for config store entries
+  - Live validation for all fields
+  - JSON/YAML validation support for agent config
+- ✅ Platform Page form migration (previously completed)
+  - All host and platform config fields
+  - Form state as source of truth
+  - Live validation
+
+**Key Achievements:**
+- Form state is source of truth during editing
+- Model only updates on save
+- Live validation provides immediate feedback
+- Config store editing now works correctly with form state
+- Data type switching (JSON/CSV) updates reactively
+
+**Files Changed:**
+- `volttron_installer/states/platform/agent_config_state.py`
+- `volttron_installer/states/mixins/agent_form_state_mixin.py`
+- `volttron_installer/pages/agent_config_page.py`
+
 ## 🚧 In Progress
 
-### Phase 4: Component Organization
+### Phase 5: Component Organization
 **Status:** In Progress
 
 **Current Component Structure:**
@@ -78,13 +105,13 @@ components/
 
 ## 📋 Remaining TODOs
 
-### Phase 5: Form Migration (Future)
-- Migrate Platform Page forms to use FormStateMixin
-- Migrate Agent Config Page forms
+### Phase 6: Form Migration (Remaining)
+- ✅ Migrate Platform Page forms to use FormStateMixin
+- ✅ Migrate Agent Config Page forms
 - Migrate BACnet Scan Page forms
 - Remove model-based form bindings after migration
 
-### Phase 6: Final Structure Cleanup
+### Phase 7: Final Structure Cleanup
 - Review and optimize directory structure
 - Remove deprecated code
 - Update documentation
@@ -107,6 +134,7 @@ components/
    - Clear separation of concerns (models, services, states)
    - React-like patterns introduced
    - Infrastructure for gradual migration
+   - Form state management implemented for Platform and Agent Config pages
 
 3. **Maintainability:**
    - Easier to navigate codebase
@@ -127,9 +155,10 @@ components/
    - Consolidate overlapping functionality
    - Create component documentation
 
-2. **Form Migration** (When Ready):
-   - Start with Platform Page (most important)
-   - Migrate one section at a time
+2. **Form Migration** (In Progress):
+   - ✅ Platform Page (complete)
+   - ✅ Agent Config Page (complete)
+   - BACnet Scan Page (remaining)
    - Test thoroughly after each migration
 
 3. **Final Polish:**

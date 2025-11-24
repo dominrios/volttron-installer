@@ -34,6 +34,40 @@
 - ✅ VIP Address: Format validation (tcp://ip:port)
 - ✅ Web Bind Address: Optional field (no validation)
 
+## ✅ Completed Migrations
+
+### Agent Config Page - **COMPLETE** ✅
+
+**Migrated Fields:**
+- ✅ `form_agent_identity` - Agent identity field with validation
+- ✅ `form_agent_source` - Agent source field with validation
+- ✅ `form_agent_config` - Agent config field with JSON/YAML validation
+- ✅ `form_config_path` - Config store entry path field with validation
+- ✅ `form_config_data_type` - Config store entry data type (JSON/CSV)
+- ✅ `form_config_value` - Config store entry value field with validation
+
+**Infrastructure Added:**
+- ✅ `AgentFormStateMixin` integrated into `AgentConfigState`
+- ✅ Form field definitions for all agent and config store fields
+- ✅ Field mappings for form-to-model sync
+- ✅ `update_form_agent_field()` method with validation
+- ✅ `update_config_detail()` method with form state management
+- ✅ Form state sync in `save_agent_config()` and `save_config_store_entry()`
+
+**Validation:**
+- ✅ Identity: Format validation (letters, numbers, underscores, hyphens)
+- ✅ Source: Required field validation
+- ✅ Config: JSON/YAML format validation (supports both formats)
+- ✅ Config Store Path: Format validation (letters, numbers, underscores, periods, hyphens, slashes)
+- ✅ Config Store Value: JSON/CSV format validation based on data type
+
+**Key Improvements:**
+- ✅ Form state is source of truth during editing
+- ✅ Live validation updates as user types
+- ✅ Config store form fields use form state instead of model
+- ✅ Data type switching (JSON/CSV) updates form state reactively
+- ✅ Save operations sync form state to model before validation
+
 ## 🚧 Remaining Fields to Migrate
 
 ### Platform Page
@@ -95,11 +129,11 @@ This allows:
 ## Next Steps
 
 1. ✅ **Platform Page Complete** - All form fields migrated!
-2. Test form validation thoroughly on Platform Page
-3. Consider migrating other pages:
-   - Agent Config Page
+2. ✅ **Agent Config Page Complete** - All form fields migrated!
+3. Test form validation thoroughly on both pages
+4. Consider migrating other pages:
    - BACnet Scan Page
-4. Once all pages migrated, consider removing model-based update methods (optional cleanup)
+5. Once all pages migrated, consider removing model-based update methods (optional cleanup)
 
 ## Notes
 
