@@ -327,7 +327,6 @@ class PlatformPageState(rx.State):
     _host_resolvable: bool = True
     _host_pinging: bool = False
     
-    # this var tracks if the host_id that the user is inputting is resolved.
     # as the user inputs a host, we make sure this is false inside of self.update_detail,
     # so we cant save the instance until the host text box has been blurred. once it has, 
     # we can check if the host is reachable or not. if it is, we set this to true.

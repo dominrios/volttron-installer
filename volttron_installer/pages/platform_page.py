@@ -1,4 +1,6 @@
 import reflex as rx
+
+from volttron_installer.model_views import AgentModelView
 from ..layouts.app_layout import app_layout
 from ..components.tiles import config_tile
 from ..components.ui.buttons import icon_button_wrapper
@@ -13,7 +15,741 @@ from ..models import Instance
 
 parts = Literal["connection", "instance_configuration"]
 
-@rx.page(route="/platform/[uid]", on_load=[State.hydrate_state, State.initialize_form_from_model])
+def status_tab() -> rx.Component:
+    return rx.vstack(
+        rx.grid( # Quick status checks
+            status_tile(
+                heading="Platform Status",
+                content="Online",
+                supplementary_text="Uptime: 12d 4h 32m"
+            ),
+            status_tile(
+                heading="Total Agents",
+                content="8",
+                supplementary_text="Installed Agents"
+            ),
+            status_tile(
+                heading="Active Agents",
+                content="6",
+                supplementary_text="Currently Running"
+            ),
+            status_tile(
+                heading="Health Status",
+                content="6/8",
+                supplementary_text="Healthy Agents"
+            ),
+            width="100%",
+            spacing="6",
+            columns={ "base": "1", "md": "4" },
+        ),
+        rx.box( # Agent table card
+            rx.box(  # CardHeader
+                rx.text("Agent Management", size="5", weight="bold"),
+                rx.text("Monitor and control your VOLTTRON agents", size="1", color="gray")
+            ),
+            rx.box( # Card Content
+                rx.box(
+                    rx.table.root(
+                        rx.table.header(
+                            rx.table.row(
+                                rx.table.column_header_cell("Agent Name"),
+                                rx.table.column_header_cell("Status"),
+                                rx.table.column_header_cell("State"),
+                                rx.table.column_header_cell("Version"),
+                                rx.table.column_header_cell("Last Seen"),
+                                rx.table.column_header_cell("Actions"),
+                            )
+                        ),
+                        rx.table.body(
+                            rx.foreach(
+                                State.working_platform.platform.agents,
+                                lambda identity_agent_pair: render_agent_row(identity_agent_pair[1])
+                            ),
+                        )
+                    )
+                )
+            ),
+            border="1px solid",
+            border_color="grey",
+            border_radius=".5rem",
+            box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+            padding="1.3rem",
+        ),
+        align_items="stretch",
+        spacing="6"
+    )
+
+def connection_tab() -> rx.Component:
+    return rx.box(
+        rx.box(  # CardHeader
+            rx.hstack(
+                rx.text("Connection Configuration", size="5", weight="bold"),
+                spacing="2",
+                align="center"
+            ),
+            rx.text("Configure your VOLTTRON platform connection settings", size="2", color="gray"),
+            margin_bottom="0.8rem"
+        ),
+        rx.vstack(  # CardContent
+            rx.grid(
+                rx.vstack(
+                    rx.hstack(
+                        rx.text("Host ", rx.text.span("*", color="red"), as_="label", html_for="host"),
+                        rx.cond(
+                            State.host_pinging,
+                            rx.spinner(),
+                            rx.cond(
+                                State.is_host_resolvable,
+                                tile_icon(
+                                    "check"
+                                ),
+                                tile_icon(
+                                    "triangle-alert"
+                                )
+                            )
+                        ),
+                        width="100%",
+                        justify="between",
+                        align="center",
+                    ),
+                    rx.input(
+                        id="host",
+                        placeholder="localhost",
+                        width="100%",
+                        value= State.working_platform.host.ansible_host,
+                        on_change=lambda v: State.update_detail("id", v),
+                        on_blur=lambda: State.determine_host_reachability(State.working_platform),
+                    ),
+                    rx.cond(
+                        State.is_host_resolvable == False,
+                        rx.text(
+                            "Host must be a valid domain or ip address",
+                            size="1",
+                            color_scheme="red",
+                        )
+                    ),
+                    width="100%",
+                    spacing="2",
+                    align="start",
+                ),
+                rx.vstack(
+                    rx.text("Username ", rx.text.span("*", color="red"), as_="label", html_for="username"),
+                    rx.input(
+                        id="username",
+                        placeholder="volttron",
+                        width="100%",
+                        value=State.working_platform.host.ansible_user,
+                        on_change=lambda v: State.update_detail("ansible_user", v),
+                    ),
+                    rx.text(
+                        "Username must have SUDO permissions",
+                        size="1",
+                        color_scheme="gray"
+                    ),
+                    width="100%",
+                    spacing="2",
+                    align="start",
+                ),
+                width="100%",
+                columns={ "base": "1", "md": "2" },
+                spacing="3"
+            ),
+            rx.grid(
+                rx.vstack(
+                    rx.vstack(
+                        rx.text("Port SSH ", rx.text.span("*", color="red"), as_="label", html_for="port_ssh"),
+                        rx.input(
+                            id="port_ssh",
+                            placeholder="22",
+                            width="100%",
+                            value=State.working_platform.host.ansible_port,
+                            on_change=lambda v: State.update_detail("ansible_port", v),
+                        ),
+                        rx.cond(
+                            State.connection_ansible_port_validity == False,
+                            rx.text(
+                                "Port SSH must be a valid port number",
+                                size="1",
+                                color_scheme="red"
+                            )
+                        ),
+                        width="100%",
+                        spacing="2",
+                        align="start",
+                    )
+                ),
+                width="100%",
+                columns="1",
+            ),
+            rx.divider(),
+            rx.hstack(
+                rx.switch(
+                    checked=State.working_platform.advanced_expanded,
+                    on_change=lambda: State.toggle_advanced(State.current_uid)
+                ), 
+                rx.text("Toggle Advanced Settings"), 
+                spacing="2"
+            ),
+            rx.divider(),
+            # Advanced Settings...
+            # TODO wrap the grids and trailing divider to a rx.cond if advanced is toggled
+            rx.cond(
+                State.working_platform.advanced_expanded,
+                rx.fragment(
+                    rx.grid(
+                        rx.text("Proxy Configuration", as_="label", html_for="proxy-config"),
+                        rx.vstack(
+                            rx.radio_group(
+                                [
+                                    "None",
+                                    "HTTP Proxy",
+                                    "HTTPS Proxy",
+                                ],
+                                id="proxy-config",
+                                direction="column",
+                                on_change=State.set_proxy_config_mode,
+                                value=State.working_platform.proxy_config_mode,
+                            ),
+                            padding="0.5rem",
+                        ),
+                        rx.cond(
+                            State.working_platform.proxy_config_mode != "None",
+                            rx.input(
+                                width="100%", 
+                                placeholder=rx.cond(
+                                    State.working_platform.proxy_config_mode == "HTTP Proxy",
+                                    "Enter HTTP Proxy URL",
+                                    "Enter HTTPS Proxy URL"
+                                ),
+                                on_change=lambda v: State.update_detail(
+                                    rx.cond(
+                                        State.working_platform.proxy_config_mode == "HTTP Proxy",
+                                        "http_proxy",
+                                        "https_proxy"
+                                    ),
+                                    v
+                                ),
+                                value=rx.cond(
+                                    State.working_platform.proxy_config_mode == "HTTP Proxy",
+                                    State.working_platform.host.http_proxy,
+                                    State.working_platform.host.https_proxy
+                                )
+                            )
+                        ),
+                        columns="1",
+                        width="100%"
+                    ),
+                    rx.grid(
+                        rx.vstack(
+                            rx.text("VOLTTRON Home", as_="label", html_for="volttron-home"),
+                            rx.input(
+                                id="volttron-home",
+                                placeholder="~/.volttron",
+                                width="100%",
+                                # value=BacnetScanState.proxy_field_value,
+                                # on_change=BacnetScanState.handle_proxy_field_edit,
+                            ),
+                            rx.text(
+                                "VOLTTRON Homes cannot be the same as another platform under the same host.",
+                                size="1",
+                                color_scheme="red",
+                            ),
+                            width="100%",
+                            spacing="2",
+                            align="start",
+                        ),
+                        rx.vstack(
+                            rx.text("Host Configs Directory", as_="label", html_for="host-configs-dir"),
+                            rx.input(
+                                id="host-configs-dir",
+                                placeholder="~/.volttron",
+                                width="100%",
+                                # value=BacnetScanState.proxy_field_value,
+                                # on_change=BacnetScanState.handle_proxy_field_edit,
+                            ),
+                            rx.text(
+                                "Host Config Directories cannot be the same as another platform under the same host.",
+                                size="1",
+                                color_scheme="red",
+                            ),
+                            width="100%",
+                            spacing="2",
+                            align="start",
+                        ),
+                        width="100%",
+                        columns={ "base": "1", "md": "2" },
+                        spacing="3"
+                    ),
+                    rx.divider()
+                )
+            ),
+            spacing="4",
+            margin_bottom="1rem"
+        ),
+        rx.hstack( # CardFooter
+            rx.button(
+                "Next: Instance Configuration",
+                on_click=lambda: State.set_platform_tab("instance_configuration")
+            ),
+            justify="end",
+        ),
+        border="1px solid",
+        border_color="grey",
+        border_radius=".5rem",
+        box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+        padding="1.3rem",
+    )
+
+def instance_configuration_tab() -> rx.Component:
+    return rx.box(
+        rx.box(  # CardHeader
+            rx.hstack(
+                rx.text("Instance Configuration", size="5", weight="bold"),
+                spacing="2",
+                align="center"
+            ),
+            rx.text("Configure your VOLTTRON platform instance settings", size="2", color="gray"),
+            margin_bottom="0.8rem"
+        ),
+        rx.vstack(  # CardContent
+            rx.grid(
+                rx.vstack(
+                    rx.text("Instance Name ", rx.text.span("*", color="red"), as_="label", html_for="instance-name"),
+                    rx.input(
+                        id="instance-name",
+                        placeholder="volttron1",
+                        width="100%",
+                        value=State.working_platform.platform.config.instance_name,
+                        on_change=lambda v: State.update_platform_config_detail("instance_name", v),
+                    ),
+                    # TODO add conditional to turn text red if error
+                    rx.text(
+                        "Instance Name must contain only letters, numbers, hyphens, and underscores", 
+                        color_scheme=rx.cond(
+                            State.platform_instance_name_validity == False,
+                            "red",
+                            "gray"
+                        )
+                    ),
+                    rx.cond(
+                        State.platform_instance_name_not_in_use == False,
+                        rx.text(
+                            "Instance Name already in use", 
+                            color_scheme="red"
+                        )
+                    ),
+                    width="100%",
+                    spacing="2",
+                    align="start",
+                ),
+                rx.vstack(
+                    rx.text("Vip Address ", rx.text.span("*", color="red"), as_="label", html_for="vip-address"),
+                    rx.input(
+                        id="vip-address",
+                        placeholder="tcp://127.0.0.1:22916",
+                        width="100%",
+                        value=State.working_platform.platform.config.vip_address,
+                        on_change=lambda v: State.update_platform_config_detail("vip_address", v),
+                    ),
+                    rx.text(
+                        "Vip Address must be in the format tcp://<ip>:<port>", 
+                        size="1",
+                        color_scheme=rx.cond(
+                            State.platform_vip_address_validity == False,
+                            "red",
+                            "gray"
+                        )
+                    ),
+                    width="100%",
+                    spacing="2",
+                    align="start",
+                ),
+                width="100%",
+                columns={ "base": "1", "md": "2" },
+                spacing="3"
+            ),
+            rx.grid(
+                rx.vstack(
+                    #TODO add conditional for web address if checked 
+                    rx.vstack(
+                        rx.hstack(
+                            rx.checkbox(
+                                id="member-of-federation",
+                                on_click = lambda: State.toggle_federation(),
+                                checked=State.working_platform.federation_checked
+                            ),
+                            rx.text("Member of Federation", as_="label", html_for="member-of-federation"),
+                            spacing="2",
+                            align="start",
+                        ),
+                        rx.hstack(
+                            rx.checkbox(
+                                id="web",
+                                checked=State.working_platform.web_checked,
+                                on_change=lambda: State.toggle_web()
+                            ),
+                            rx.text("Web", as_="label", html_for="web"),
+                            spacing="2",
+                            align="start",
+                        ),
+                        # This is the leaf component that appears under the checkbox with a vertical line
+                        rx.cond(
+                            State.working_platform.web_checked,
+                            rx.hstack(
+                                # Vertical line on the left
+                                rx.box(
+                                    width="2px",
+                                    background_color="#272727FF",
+                                    height="100%",
+                                    margin_left="6px",  # Margin left to align with checkbox
+                                ),
+                                # Field content
+                                rx.vstack(
+                                    rx.text("Web Bind Address", as_="label", html_for="web-bind-address"),
+                                    rx.input(
+                                        id="web-bind-address",
+                                        placeholder="",
+                                        value=State.working_platform.web_bind_address,
+                                        on_change=lambda v: State.update_platform_config_detail("web_bind_address", v),
+                                    ),
+                                    align="start",
+                                    spacing="1",
+                                    width="100%",
+                                    padding_left="6px",  # Padding left to create space from the vertical line
+                                ),
+                                align_items="flex-start",
+                                width="100%",
+                            )
+                        ),
+                        align_items="flex-start",
+                        width="100%",
+                        spacing="0",  # Reduce space between checkbox and leaf
+                    )
+                ),
+                width="100%",
+                columns="1",
+            ),
+            rx.divider(),
+            spacing="4",
+            margin_bottom="1rem"
+        ),
+        rx.hstack( # CardFooter
+            rx.button(
+                "Back: Connection",
+                on_click=lambda: State.set_platform_tab("connection", State.working_platform),
+                variant="outline"
+            ),
+            rx.button(
+                "Next: Agent Configuration",
+                on_click=lambda: State.set_platform_tab("agent_configuration", State.working_platform)
+            ),
+            justify="between",
+        ),
+        border="1px solid",
+        border_color="grey",
+        border_radius=".5rem",
+        box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+        padding="1.3rem",
+    )
+
+def agent_configuration_tab() -> rx.Component:
+    return rx.vstack(
+        rx.grid(
+            rx.box( # Listed Agents Card
+                rx.box(  # CardHeader
+                    rx.hstack(
+                        rx.text("Listed Agents", size="5", weight="bold"),
+                        spacing="2",
+                        align="center"
+                    ),
+                    rx.text("Select agents to add to your platform", size="2", color="gray"),
+                    margin_bottom="0.8rem"
+                ),
+                rx.box( # Card Content - Changed from vstack to box with position
+                    rx.vstack( # Content wrapper
+                        rx.foreach(
+                            State.list_of_agents,
+                            lambda agent: add_agent_tile(
+                                agent=agent
+                            )
+                        ),
+                        width="100%",
+                    ),
+                    overflow_y="auto",
+                    height="35rem",
+                    width="100%",
+                    padding_right=".75rem",
+                    position="relative", # Added position
+                ),
+                border="1px solid",
+                border_color="grey",
+                border_radius=".5rem",
+                box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+                padding="1.3rem",
+                display="flex", # Added display flex
+                flex_direction="column", # Ensure vertical layout
+            ),
+            rx.box(
+                rx.box( # Card Header
+                    rx.hstack(
+                        rx.text("Added Agents", size="5", weight="bold"),
+                        spacing="2",
+                        align="center"
+                    ),
+                    rx.text("Configure, update, or remove added agents on your platform", size="2", color="gray"),
+                    margin_bottom="0.8rem"
+                ),
+                rx.box(  # Card Content
+                    rx.vstack( # Content wrapper
+                        rx.foreach(
+                            State.working_platform.platform.agents,
+                            lambda identity_agent_pair: added_agent_tile(
+                                agent=identity_agent_pair[1]
+                            )
+                        ),
+                        width="100%",
+                    ),
+                    overflow_y="auto",
+                    height="35rem",
+                    width="100%",
+                    padding_right=".75rem",
+                    position="relative", # Added position
+                ),
+                border="1px solid",
+                border_color="grey",
+                border_radius=".5rem",
+                box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+                padding="1.3rem",
+                display="flex", # Added display flex
+                flex_direction="column", # Ensure vertical layout
+            ),
+            spacing="2",
+            columns={ "base" : "1", "md" : "2" },
+            width="100%",
+        ),
+        rx.hstack(
+            rx.button(
+                "Back: Instance Configuration",
+                on_click=lambda: State.set_platform_tab("instance_configuration"),
+                variant="outline"
+            ),
+            rx.button(
+                "Complete Setup", # deploy, save, whatever we want
+                color_scheme="green",
+            ),
+            justify="between",
+            width="100%",
+        ),
+        spacing="4",
+        width="100%", # Ensure full width
+    )
+
+@rx.memo
+def status_tile(heading: str, content: str, supplementary_text: str) -> rx.Component:
+    return rx.box(
+        rx.box( # Card Header
+            rx.text(heading, size="4", color="gray", weight="bold")
+        ),
+        rx.vstack( # Card Content
+            rx.text(content, size="5", weight="bold"),
+            rx.text(supplementary_text, size="1", color="gray"),
+            margin_top="2rem"
+        ),
+        border="1px solid",
+        border_color="grey",
+        border_radius=".5rem",
+        box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+        padding="1.3rem",
+        # max_width="350px"
+    )
+
+def added_agent_tile(agent: AgentModelView) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.box(
+                rx.hstack(
+                    rx.text(agent.identity, size="5", weight="bold"),
+                    spacing="2",
+                    align="center"
+                ),
+                # rx.text(description, size="2", color="gray"),
+            ),
+            rx.hstack(
+                rx.button(
+                    rx.icon("settings", size=16),
+                    rx.text("Configure"),
+                    on_click=lambda: NavigationState.route_to_agent_config(
+                        State.current_uid,
+                        agent.identity,
+                        agent
+                    ),
+                    size="1"
+                ),
+                rx.button(
+                    rx.icon("trash-2", size=16),
+                    rx.text("Remove"),
+                    variant="outline",
+                    color_scheme="red",
+                    on_click=lambda: State.handle_removing_agent(agent.identity),
+                    size="1"
+                ),
+                spacing="2"
+            ),
+            justify="between",
+            align="center",
+            width="100%"
+        ),
+        width="100%",
+        border="1px solid",
+        border_color="grey",
+        border_radius=".5rem",
+        box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+        padding=".75rem",
+    )
+
+def add_agent_tile(agent: AgentModelView) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.box(
+                rx.hstack(
+                    rx.text(agent.identity, size="5", weight="bold"),
+                    spacing="2",
+                    align="center"
+                ),
+                # rx.text(description, size="2", color="gray"),
+            ),
+            rx.button(
+                rx.icon("plus", size=16),
+                rx.text("Add"),
+                on_click=lambda: State.handle_adding_agent(agent, State.current_uid),
+                size="1"
+            ),
+            justify="between",
+            align="center",
+            width="100%"
+        ),
+        width="100%",
+        border="1px solid",
+        border_color="grey",
+        border_radius=".5rem",
+        box_shadow="0 4px 12px rgba(0,0,0,0.08)",
+        padding=".75rem",
+    )
+
+def get_status_cell(status: str) -> rx.Component:
+    status_check = status.lower().strip()
+    return rx.cond(
+        status_check == "healthy",
+        rx.badge(
+            "Healthy",
+            variant="soft",
+            size="2",
+            color_scheme="green",
+        ),
+        rx.badge(
+            "Unhealthy",
+            variant="solid",
+            size="2",
+            color_scheme="red",
+        ),
+    )
+
+def get_state_cell(state: str) -> rx.Component:
+    state_check = state.lower().strip()
+    return rx.cond(
+        state_check == "running",
+        rx.badge(
+            "Running",
+            variant="soft",
+            size="2",
+        ),
+        rx.badge(
+            "Stopped",
+            variant="outline",
+            size="2",
+            color_scheme="gray",
+        ),
+    )
+
+def render_agent_row(agent: AgentModelView) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.vstack(
+                rx.text(agent.identity, size="3", weight="bold"),
+                # rx.text("Agent Description", size="1", color="gray"),
+                spacing="1"
+            )
+        ),
+        rx.table.cell(
+            get_status_cell("Unhealthy")
+        ),
+        rx.table.cell(
+            get_state_cell("Stopped")
+        ),
+        #TODO we need an api call to get the pip version
+        rx.table.cell(
+            "1.2.3"
+        ),
+        #TODO we need an api cal for this information
+        rx.table.cell(
+            rx.text("2 min ago", color="gray")
+        ),
+        render_agent_actions_cell(agent)
+    )
+
+def render_agent_actions_cell(agent: AgentModelView) -> rx.Component:
+    return rx.table.cell(
+        rx.hstack(
+            rx.button(
+                rx.icon("square", size=16),
+                rx.text("Stop"),
+                variant="outline"
+            ),
+            agent_actions_dropdown(agent),
+            spacing="4",
+            align="center"
+        )
+    )
+
+def agent_actions_dropdown(agent: AgentModelView) -> rx.Component:
+    return rx.menu.root(
+        rx.menu.trigger(
+            rx.button(
+                rx.icon("ellipsis", size=16),
+                variant="ghost",
+                color_scheme="gray"
+            )
+        ),
+        rx.menu.content(
+            rx.menu.item(
+                rx.hstack(
+                    rx.icon("settings", size=16),
+                    rx.text("Configure"),
+                    align="center",
+                    spacing="2"
+                ),
+                on_click=lambda: NavigationState.route_to_agent_config(
+                    State.current_uid,
+                    agent.identity,
+                    agent
+                )
+            ),
+            rx.menu.item(
+                "View Logs",
+            ),
+            rx.separator(),
+            rx.menu.item(
+                "Restart Agent",
+                color_scheme="blue"
+            ),
+            rx.menu.item(
+                "Delete Agent",
+                color_scheme="red"
+            )
+        )
+    )
+
+@rx.page(route="/platform/[uid]", on_load=State.hydrate_state)
 def platform_page() -> rx.Component:
     return rx.box(
         rx.vstack(
