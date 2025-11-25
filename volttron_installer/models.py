@@ -1,3 +1,4 @@
+from typing import Literal
 import reflex as rx
 from loguru import logger
 from .model_views import HostEntryModelView, PlatformModelView
@@ -16,10 +17,12 @@ class Instance(rx.Base):
     valid: bool = False    
 
     # UI vars
+    proxy_config_mode: Literal["None", "HTTP Proxy", "HTTPS Proxy"] = "None"
     web_checked: bool = False
     federation_checked: bool = False
     advanced_expanded: bool = False
     agent_configuration_expanded: bool = False
+    selected_tab: Literal["status", "connection", "instance_configuration", "agent_configuration"] = "connection"
 
     new_instance: bool = True
     deployed: bool = False

@@ -68,6 +68,11 @@ def platform_page() -> rx.Component:
                     rx.tabs.trigger("Agent Configuration", value="agent_configuration"),
                 ),
                 rx.tabs.content(
+                    status_tab(),
+                    padding_y="1.5rem",
+                    value="status"
+                ),
+                rx.tabs.content(
                     connection_tab(),
                     padding_y="1.5rem",
                     value="connection"
@@ -79,9 +84,12 @@ def platform_page() -> rx.Component:
                 ),
                 rx.tabs.content(
                     agent_configuration_tab(),
+                    padding_y="1.5rem",
                     value="agent_configuration"
                 ),
                 width="100%",
+                value=State.working_platform.selected_tab,
+                on_change=lambda: State.set_platform_tab
             ),
             width="100%",
             max_width="1200px",
