@@ -157,6 +157,9 @@ async def __instances_from_api__() -> dict[str, Instance]:
 
 
 class PlatformPageState(rx.State, FormStateMixin):
+    # Performance: Pre-compile regex patterns used in validation
+    _INSTANCE_NAME_REGEX = re.compile(r"^[a-zA-Z][a-zA-Z0-9_.-/-]*$")
+    _VIP_ADDRESS_REGEX = re.compile(r'^tcp://[\d.]+:\d+$')
     #TODO once we save a platform, we create a routing id 
     # off of it's instance name, and redirect the user to 
     # platforms/x, maybe we might have to delete the old 
@@ -350,7 +353,7 @@ class PlatformPageState(rx.State, FormStateMixin):
     @rx.var
     def host_resolved(self) -> bool: return self._host_resolved
 
-    @rx.var
+    @rx.var(cache=True)
     def connection_validity(self) -> bool:
         """Check connection validity using form state."""
         if self.current_uid == "":
@@ -367,28 +370,28 @@ class PlatformPageState(rx.State, FormStateMixin):
         return self._host_resolvable
 
 
-    @rx.var
+    @rx.var(cache=True)
     def connection_id_validity(self) -> bool:
         """Check connection ID validity using form state."""
         if self.current_uid == "":
             return True
         return self.form_connection_validity()[1]["id"]
     
-    @rx.var
+    @rx.var(cache=True)
     def connection_ansible_user_validity(self) -> bool:
         """Check ansible user validity using form state."""
         if self.current_uid == "":
             return True
         return self.form_connection_validity()[1]["ansible_user"]
     
-    @rx.var
+    @rx.var(cache=True)
     def connection_ansible_host_validity(self) -> bool:
         """Check ansible host validity using form state."""
         if self.current_uid == "":
             return True
         return self.form_connection_validity()[1]["ansible_host"]
     
-    @rx.var
+    @rx.var(cache=True)
     def connection_ansible_port_validity(self) -> bool:
         """Check ansible port validity using form state."""
         if self.current_uid == "":
@@ -396,28 +399,28 @@ class PlatformPageState(rx.State, FormStateMixin):
         return self.form_connection_validity()[1]["ansible_port"]
 
     # ==== vars for platform validation ===
-    @rx.var
+    @rx.var(cache=True)
     def platform_validity(self) -> bool:
         """Check platform validity using form state."""
         if self.current_uid == "":
             return True
         return self.form_platform_validity()[0]
     
-    @rx.var
+    @rx.var(cache=True)
     def platform_instance_name_validity(self)-> bool:
         """Check instance name validity using form state."""
         if self.current_uid == "":
             return True
         return self.form_platform_validity()[1]["instance_name"]
     
-    @rx.var
+    @rx.var(cache=True)
     def platform_instance_name_not_in_use(self)-> bool:
         """Check if instance name is available using form state."""
         if self.current_uid == "":
             return True
         return self.form_platform_validity()[1]["instance_name_not_used"]
     
-    @rx.var
+    @rx.var(cache=True)
     def platform_vip_address_validity(self) -> bool:
         """Check VIP address validity using form state."""
         if self.current_uid == "":
@@ -665,17 +668,22 @@ class PlatformPageState(rx.State, FormStateMixin):
 
     @rx.event
     def update_detail(self, field: str, value):
-        """Update host detail - supports both model-based and form-based updates."""
+        """
+        Update host detail - DEPRECATED: Use update_form_host_field() instead.
+        
+        This method is kept for backward compatibility but is no longer used.
+        All form updates should go through update_form_host_field() which uses form state.
+        """
+        # Legacy method - kept for backward compatibility only
+        # All updates should use form-based methods instead
         working_platform_instance = self.platforms[self.current_uid]
         if field == "id":
             self._host_resolved = False
             setattr(working_platform_instance.host, "ansible_host", value)
-            # Also update form state if using forms
             if hasattr(self, 'form_ansible_host'):
                 self.form_ansible_host = value
         else:
             setattr(working_platform_instance.host, field, value)
-            # Also update form state if using forms
             form_field = f"form_{field}"
             if hasattr(self, form_field):
                 setattr(self, form_field, value)
@@ -722,16 +730,21 @@ class PlatformPageState(rx.State, FormStateMixin):
 
     @rx.event
     def update_platform_config_detail(self, field: str, value: str):
-        """Update platform config detail - supports both model-based and form-based updates."""
+        """
+        Update platform config detail - DEPRECATED: Use update_form_platform_field() instead.
+        
+        This method is kept for backward compatibility but is no longer used.
+        All form updates should go through update_form_platform_field() which uses form state.
+        """
+        # Legacy method - kept for backward compatibility only
+        # All updates should use form-based methods instead
         working_platform = self.platforms[self.current_uid]
         if field == "web_bind_address":
             setattr(working_platform, field, value)
-            # Also update form state if using forms
             if hasattr(self, 'form_web_bind_address'):
                 self.form_web_bind_address = value
         else:
             setattr(working_platform.platform.config, field, value)
-            # Also update form state if using forms
             form_field = f"form_{field}"
             if hasattr(self, form_field):
                 setattr(self, form_field, value)
@@ -889,13 +902,6 @@ class PlatformPageState(rx.State, FormStateMixin):
                 return new_uid
     
     # functions to check if things are savable, reachable, valid, uncaught.
-    async def check_host_reachable(self, working_platform: Instance) -> bool:
-        """Check host reachability from model (legacy method)."""
-        host_id = working_platform.host.id
-        if host_id =="":
-            return False
-        response = await ping_resolvable_host(host_id)
-        return response.reachable
     
     async def check_host_reachable_from_form(self) -> bool:
         """Check host reachability from form state."""
@@ -1012,91 +1018,26 @@ class PlatformPageState(rx.State, FormStateMixin):
             "vip_address": True
         }
         
-        # Validate the instance name
-        valid_field_name_for_instance = re.compile(r"^[a-zA-Z][a-zA-Z0-9_.-/-]*$")
-        if not valid_field_name_for_instance.fullmatch(self.form_instance_name):
+        # Validate the instance name (using pre-compiled regex for performance)
+        if not self._INSTANCE_NAME_REGEX.fullmatch(self.form_instance_name):
             valid = False
             validity_map["instance_name"] = False
         
         # Check to see if our instance name is taken already
-        existing_names = [
+        # Optimize: Use set comprehension for faster lookup
+        existing_names = {
             p.platform.safe_platform["config"]["instance_name"] 
             for p in self.in_file_platforms 
             if p.new_instance == False and self.current_uid != p.platform.safe_platform["config"]["instance_name"]
-        ]
+        }
         
         if self.form_instance_name in existing_names:
             valid = False
             validity_map["instance_name_not_used"] = False
         
-        # Validate the tcp address
-        if not re.match(r'^tcp://[\d.]+:\d+$', self.form_vip_address):
+        # Validate the tcp address (using pre-compiled regex for performance)
+        if not self._VIP_ADDRESS_REGEX.match(self.form_vip_address):
             valid = False
             validity_map["vip_address"] = False
         
-        return (valid, validity_map)
-
-    def connection_validity(self, working_platform: Instance) -> tuple[bool, dict[str, bool]]:
-        valid = True
-        validity_map: dict[str, bool] = {
-            "id" : True,
-            "ansible_user" : True,
-            "ansible_host" : True,
-            "ansible_port" : True,
-            "http_proxy" : True,
-            "https_proxy" : True,
-            "volttron_venv" : True,
-            "volttron_home" : True
-        }
-        # Validate the host id
-        if working_platform.host.id == "":
-            valid = False
-            validity_map["id"] = False
-
-        # Validate the ansible user
-        if working_platform.host.ansible_user == "":
-            valid = False
-            validity_map["ansible_user"] = False
-
-        # Validate the ansible host
-        if working_platform.host.ansible_host == "":
-            valid = False
-            validity_map["ansible_host"] = False
-
-        # Validate the ansible port
-        if not isinstance(working_platform.host.ansible_port, int):
-            if not working_platform.host.ansible_port.isnumeric():
-                valid = False
-                validity_map["ansible_port"] = False
-
-        return (valid, validity_map)
-
-    def platform_validity(self, working_platform: Instance) -> tuple[bool, dict[str, bool]]:
-        valid = True
-        validity_map: dict[str, bool] = {
-            "instance_name" : True,
-            "instance_name_not_used" : True,
-            "vip_address" : True
-        }
-        # Validate the instance name
-        valid_field_name_for_instance = re.compile(r"^[a-zA-Z][a-zA-Z0-9_.-/-]*$")
-        if not valid_field_name_for_instance.fullmatch(working_platform.platform.config.instance_name):
-            valid = False
-            validity_map["instance_name"] = False
-        
-        new_name = working_platform.platform.config.instance_name
-        existing_names=[p.platform.safe_platform["config"]["instance_name"] for p in self.in_file_platforms if p.new_instance == False and self.current_uid != p.platform.safe_platform["config"]["instance_name"]]
-
-        # Check to see if our instance is taken already:
-        # Seeing if our instance name is inside a list of already registered instance names...
-        if working_platform.platform.config.instance_name in [p.platform.safe_platform["config"]["instance_name"] for p in self.in_file_platforms if p.new_instance == False and self.current_uid != p.platform.safe_platform["config"]["instance_name"]]:
-            valid = False
-            validity_map["instance_name_not_used"] = False
-            
-
-        # Validate the tcp address
-        if not re.match(r'^tcp://[\d.]+:\d+$', working_platform.platform.config.vip_address):
-            valid = False
-            validity_map["vip_address"] = False
-
         return (valid, validity_map)
